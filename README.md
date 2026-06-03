@@ -90,6 +90,8 @@ For a public Firefox Add-ons page, publish as `listed` and complete AMO review. 
 
 More detail: [docs/amo-publishing.md](docs/amo-publishing.md)
 
+AMO source build instructions: [docs/amo-source-build.md](docs/amo-source-build.md)
+
 ## Vault Setup
 
 Example policy:

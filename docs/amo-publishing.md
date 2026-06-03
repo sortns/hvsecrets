@@ -21,7 +21,7 @@ Use `unlisted` for internal testing. Use `listed` when the extension should be i
 
 For listed publishing, AMO needs public listing metadata and review information. The first listed submission is usually easiest to do in Developer Hub so you can fill in the listing, privacy, permissions, and review fields interactively. After the listing exists, tagged releases can publish updates through the GitHub workflow.
 
-Because this project is bundled by Vite, AMO reviewers may ask for readable source code for listed review. Set `AMO_UPLOAD_SOURCE=true` so the workflow uploads a repository source archive with the signed submission.
+Because this project is bundled by Vite, AMO reviewers may ask for readable source code for listed review. Build instructions for reviewers are maintained in [amo-source-build.md](amo-source-build.md). Set `AMO_UPLOAD_SOURCE=true` so the workflow uploads a repository source archive with the signed submission.
 
 ## GitHub Release Flow
 
