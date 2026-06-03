@@ -1,0 +1,8 @@
+dist/
+coverage/
+node_modules/
+.env
+.env.*
+!.env.example
+web-ext-artifacts/
+*.log

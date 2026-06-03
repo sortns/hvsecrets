@@ -1,0 +1,37 @@
+{
+  "name": "firefox-vault",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Firefox WebExtension password-manager workflow backed by HashiCorp Vault KV.",
+  "scripts": {
+    "build": "tsc --noEmit && vite build",
+    "dev": "vite build --watch",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "lint": "eslint .",
+    "test": "vitest run",
+    "test:integration": "VAULT_INTEGRATION_TEST=1 vitest run tests/integration",
+    "web-ext:run": "npm run build && web-ext run --source-dir dist",
+    "web-ext:run:windows": "npm run build && web-ext run --source-dir dist --firefox '/mnt/c/Program Files/Mozilla Firefox/firefox.exe'",
+    "web-ext:build": "npm run build && web-ext build --source-dir dist --overwrite-dest",
+    "web-ext:lint": "npm run build && web-ext lint --source-dir dist",
+    "release:local": "npm run web-ext:lint && npm run web-ext:build"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.27.0",
+    "@types/firefox-webext-browser": "^120.0.4",
+    "@types/node": "^22.15.21",
+    "eslint": "^9.27.0",
+    "globals": "^16.2.0",
+    "prettier": "^3.5.3",
+    "typescript": "^5.8.3",
+    "typescript-eslint": "^8.32.1",
+    "vite": "^6.3.5",
+    "vitest": "^3.1.4",
+    "web-ext": "^10.2.0"
+  }
+}

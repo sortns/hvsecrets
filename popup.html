@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Firefox Vault</title>
+    <script type="module" src="/src/popup/index.ts"></script>
+  </head>
+  <body>
+    <main>
+      <h1>Firefox Vault</h1>
+      <dl>
+        <div>
+          <dt>Vault</dt>
+          <dd id="vault-url">Loading</dd>
+        </div>
+        <div>
+          <dt>Path</dt>
+          <dd id="vault-path">Loading</dd>
+        </div>
+        <div>
+          <dt>Auth</dt>
+          <dd id="auth-state">Loading</dd>
+        </div>
+      </dl>
+
+      <section>
+        <h2>Credentials</h2>
+        <ul id="credential-list"></ul>
+      </section>
+
+      <footer>
+        <button id="refresh" type="button">Refresh</button>
+        <button id="validate-token" type="button">Check Connection</button>
+        <button id="login-oidc" type="button">OIDC Login</button>
+        <button id="open-options" type="button">Options</button>
+      </footer>
+      <p id="status" role="status"></p>
+    </main>
+  </body>
+</html>

@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Firefox Vault Options</title>
+    <script type="module" src="/src/options/index.ts"></script>
+  </head>
+  <body>
+    <main>
+      <h1>Firefox Vault Options</h1>
+      <form id="options-form">
+        <label>
+          Vault URL
+          <input id="vault-url" name="vaultUrl" autocomplete="off" required />
+        </label>
+        <label>
+          KV mount
+          <input id="kv-mount" name="kvMount" autocomplete="off" required />
+        </label>
+        <label>
+          Base secret path
+          <input id="base-path" name="basePath" autocomplete="off" required />
+        </label>
+        <label>
+          Vault namespace
+          <input id="vault-namespace" name="vaultNamespace" autocomplete="off" />
+        </label>
+        <fieldset>
+          <legend>Authentication</legend>
+          <label class="inline">
+            <input type="radio" name="authMode" value="token" checked />
+            Token
+          </label>
+          <label class="inline">
+            <input type="radio" name="authMode" value="oidc" />
+            OIDC
+          </label>
+        </fieldset>
+        <section id="token-fields">
+          <label>
+            Vault token
+            <input id="vault-token" name="vaultToken" type="password" autocomplete="off" />
+          </label>
+          <label class="inline">
+            <input id="clear-token" name="clearToken" type="checkbox" />
+            Clear saved token
+          </label>
+        </section>
+        <section id="oidc-fields">
+          <label>
+            OIDC auth mount
+            <input id="oidc-auth-mount" name="oidcAuthMount" autocomplete="off" />
+          </label>
+          <label>
+            OIDC role
+            <input id="oidc-role" name="oidcRole" autocomplete="off" />
+          </label>
+          <button id="login-oidc" type="button">Login With OIDC</button>
+          <p id="oidc-redirect-uri"></p>
+        </section>
+        <footer>
+          <button type="submit">Save</button>
+          <button id="validate-token" type="button">Check Connection</button>
+        </footer>
+      </form>
+      <p id="status" role="status"></p>
+      <section id="ignored-origins-section">
+        <h2>Ignored Save Prompts</h2>
+        <form id="ignored-origin-form">
+          <label>
+            Origin
+            <input
+              id="ignored-origin"
+              name="ignoredOrigin"
+              placeholder="https://example.com"
+              autocomplete="off"
+            />
+          </label>
+          <button type="submit">Add Origin</button>
+        </form>
+        <ul id="ignored-origins"></ul>
+      </section>
+    </main>
+  </body>
+</html>

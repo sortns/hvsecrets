@@ -1,0 +1,123 @@
+import { normalizeVaultPath, normalizeVaultUrl } from "../vault/paths";
+
+export type AuthMode = "token" | "oidc";
+
+export interface ExtensionConfig {
+  readonly vaultUrl: string;
+  readonly kvMount: string;
+  readonly basePath: string;
+  readonly authMode: AuthMode;
+  readonly oidcAuthMount: string;
+  readonly oidcRole: string;
+  readonly vaultNamespace: string;
+  readonly hasToken: boolean;
+  readonly tokenExpiresAt: string | null;
+  readonly tokenRenewable: boolean;
+}
+
+export interface ExtensionConfigInput {
+  readonly vaultUrl: string;
+  readonly kvMount: string;
+  readonly basePath: string;
+  readonly authMode: AuthMode;
+  readonly oidcAuthMount?: string;
+  readonly oidcRole?: string;
+  readonly vaultNamespace?: string;
+}
+
+export interface ExtensionSecrets {
+  readonly vaultToken?: string;
+  readonly tokenExpiresAt?: string | null;
+  readonly tokenRenewable?: boolean;
+}
+
+export interface ConfigValidationResult {
+  readonly ok: boolean;
+  readonly errors: readonly string[];
+}
+
+export const configStorageKey = "firefoxVault.config";
+export const secretsStorageKey = "firefoxVault.secrets";
+
+export const defaultConfig: ExtensionConfig = {
+  vaultUrl: envString("VITE_VAULT_URL", "http://127.0.0.1:8200"),
+  kvMount: envString("VITE_VAULT_KV_MOUNT", "secret"),
+  basePath: envString("VITE_VAULT_BASE_PATH", "firefox-vault"),
+  authMode: "token",
+  oidcAuthMount: envString("VITE_VAULT_OIDC_AUTH_MOUNT", "oidc"),
+  oidcRole: envString("VITE_VAULT_OIDC_ROLE", "firefox-vault"),
+  vaultNamespace: "",
+  hasToken: false,
+  tokenExpiresAt: null,
+  tokenRenewable: false
+};
+
+export interface TokenState {
+  readonly hasToken: boolean;
+  readonly tokenExpiresAt: string | null;
+  readonly tokenRenewable: boolean;
+}
+
+export function normalizeConfig(
+  input: ExtensionConfigInput,
+  tokenState: TokenState
+): ExtensionConfig {
+  return {
+    vaultUrl: normalizeVaultUrl(input.vaultUrl),
+    kvMount: normalizeVaultPath(input.kvMount),
+    basePath: normalizeVaultPath(input.basePath),
+    authMode: input.authMode,
+    oidcAuthMount: normalizeVaultPath(input.oidcAuthMount ?? defaultConfig.oidcAuthMount),
+    oidcRole: (input.oidcRole ?? defaultConfig.oidcRole).trim(),
+    vaultNamespace: (input.vaultNamespace ?? "").trim(),
+    ...tokenState
+  };
+}
+
+export function validateConfig(config: ExtensionConfig): ConfigValidationResult {
+  const errors: string[] = [];
+
+  if (config.authMode === "token" && !config.hasToken) {
+    errors.push("Vault token is required for token auth");
+  }
+
+  if (config.authMode === "oidc" && config.oidcRole.length === 0) {
+    errors.push("OIDC role is required for OIDC auth");
+  }
+
+  if (config.authMode === "oidc" && !config.hasToken) {
+    errors.push("OIDC login is required");
+  }
+
+  if (config.authMode === "oidc" && isExpiredToken(config.tokenExpiresAt)) {
+    errors.push("OIDC token is expired; login again");
+  }
+
+  return {
+    ok: errors.length === 0,
+    errors
+  };
+}
+
+export function redactConfig(config: ExtensionConfig): ExtensionConfig {
+  return {
+    ...config,
+    hasToken: config.hasToken
+  };
+}
+
+function envString(name: string, fallback: string): string {
+  const value: unknown = import.meta.env[name];
+
+  return typeof value === "string" && value.length > 0 ? value : fallback;
+}
+
+function isExpiredToken(expiresAt: string | null): boolean {
+  if (expiresAt === null) {
+    return false;
+  }
+
+  const timestamp = Date.parse(expiresAt);
+
+  return Number.isFinite(timestamp) && timestamp <= Date.now();
+}
