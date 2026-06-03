@@ -2,9 +2,12 @@ import { findLoginFormFields } from "./forms";
 import type { RuntimeRequest, RuntimeResponse } from "../shared/messages";
 import type { CredentialSummary } from "../vault/credential-repository";
 import type { PendingCredential } from "../shared/pending-credential";
-import { isFillCredentialMessage, type FillCredentialMessage } from "../shared/content-messages";
+import {
+  isFillCredentialMessage,
+  type FillCredentialMessage,
+} from "../shared/content-messages";
 
-const rootId = "firefox-vault-inline-root";
+const rootId = "hvsecrets-inline-root";
 const menuGapPx = 8;
 let menuElement: HTMLDivElement | null = null;
 let savePromptElement: HTMLDivElement | null = null;
@@ -27,10 +30,10 @@ function attachFormListeners(): void {
     "submit",
     (event) => {
       void captureSubmittedCredential(
-        event.target instanceof HTMLFormElement ? event.target : document
+        event.target instanceof HTMLFormElement ? event.target : document,
       );
     },
-    true
+    true,
   );
 
   document.addEventListener(
@@ -40,7 +43,7 @@ function attachFormListeners(): void {
         void captureSubmittedCredential(document);
       }
     },
-    true
+    true,
   );
 
   document.addEventListener(
@@ -50,7 +53,7 @@ function attachFormListeners(): void {
         void maybeShowCredentialMenu(event.target);
       }
     },
-    true
+    true,
   );
 
   document.addEventListener(
@@ -64,13 +67,16 @@ function attachFormListeners(): void {
         hideCredentialMenu();
       }
     },
-    true
+    true,
   );
 
   document.addEventListener(
     "keydown",
     (event) => {
-      if (event.target instanceof HTMLInputElement && isPasswordField(event.target)) {
+      if (
+        event.target instanceof HTMLInputElement &&
+        isPasswordField(event.target)
+      ) {
         if (event.key === "Escape") {
           hideCredentialMenu();
           return;
@@ -81,7 +87,7 @@ function attachFormListeners(): void {
         }
       }
     },
-    true
+    true,
   );
 
   document.addEventListener("click", (event) => {
@@ -105,7 +111,7 @@ function fillCredential(credential: FillCredentialMessage["credential"]): {
   if (fields === null) {
     return {
       ok: false,
-      error: "No username/password fields found"
+      error: "No username/password fields found",
     };
   }
 
@@ -116,19 +122,29 @@ function fillCredential(credential: FillCredentialMessage["credential"]): {
   return { ok: true };
 }
 
-async function maybeShowCredentialMenu(target: HTMLInputElement): Promise<void> {
+async function maybeShowCredentialMenu(
+  target: HTMLInputElement,
+): Promise<void> {
   const fields = findLoginFormFields();
 
-  if (fields === null || (target !== fields.username && target !== fields.password)) {
+  if (
+    fields === null ||
+    (target !== fields.username && target !== fields.password)
+  ) {
     hideCredentialMenu();
     return;
   }
 
   suppressNativeAutocomplete(fields);
 
-  const response = await sendRuntimeRequest({ type: "credentials.listForSenderOrigin" });
+  const response = await sendRuntimeRequest({
+    type: "credentials.listForSenderOrigin",
+  });
 
-  if (response.type !== "credentials.list" || response.credentials.length === 0) {
+  if (
+    response.type !== "credentials.list" ||
+    response.credentials.length === 0
+  ) {
     hideCredentialMenu();
     return;
   }
@@ -138,13 +154,13 @@ async function maybeShowCredentialMenu(target: HTMLInputElement): Promise<void> 
 
 function showCredentialMenu(
   anchor: HTMLInputElement,
-  credentials: readonly CredentialSummary[]
+  credentials: readonly CredentialSummary[],
 ): void {
   hideCredentialMenu();
 
   const menu = document.createElement("div");
   menu.id = rootId;
-  menu.className = "firefox-vault-menu";
+  menu.className = "hvsecrets-menu";
 
   for (const credential of credentials) {
     const button = document.createElement("button");
@@ -163,13 +179,14 @@ function showCredentialMenu(
   positionMenu(anchor, menu);
   menuElement = menu;
   const fields = findLoginFormFields();
-  menuAnchorInputs = fields === null ? [anchor] : [fields.username, fields.password];
+  menuAnchorInputs =
+    fields === null ? [anchor] : [fields.username, fields.password];
 }
 
 async function fillCredentialFromVault(credentialId: string): Promise<void> {
   await sendRuntimeRequest({
     type: "credentials.fillSenderOrigin",
-    credentialId
+    credentialId,
   });
   hideCredentialMenu();
 }
@@ -203,16 +220,19 @@ function isLoginActionTarget(target: EventTarget | null): boolean {
   }
 
   const action = target.closest<HTMLElement>(
-    "button, input[type='submit'], input[type='button'], [role='button'], .x-btn"
+    "button, input[type='submit'], input[type='button'], [role='button'], .x-btn",
   );
 
   if (action === null) {
     return false;
   }
 
-  const primaryLabel = action instanceof HTMLInputElement ? action.value : action.textContent;
+  const primaryLabel =
+    action instanceof HTMLInputElement ? action.value : action.textContent;
   const fallbackLabel = action.getAttribute("aria-label") ?? "";
-  const label = (primaryLabel.trim().length === 0 ? fallbackLabel : primaryLabel).trim();
+  const label = (
+    primaryLabel.trim().length === 0 ? fallbackLabel : primaryLabel
+  ).trim();
 
   return /^(log ?in|sign ?in|войти|вход)$/i.test(label);
 }
@@ -228,7 +248,7 @@ function positionMenu(anchor: HTMLElement, menu: HTMLElement): void {
   const alignedY = clamp(
     rect.top + window.scrollY,
     window.scrollY + menuGapPx,
-    window.scrollY + viewportHeight - menuRect.height - menuGapPx
+    window.scrollY + viewportHeight - menuRect.height - menuGapPx,
   );
 
   if (rect.right + menuGapPx + menuRect.width <= viewportWidth) {
@@ -275,8 +295,8 @@ async function captureSubmittedCredential(root: ParentNode): Promise<void> {
       url: window.location.href,
       title: document.title,
       username: fields.username.value.trim(),
-      password: fields.password.value
-    }
+      password: fields.password.value,
+    },
   });
 
   if (response.type === "credentials.captureResult" && response.ok) {
@@ -285,7 +305,9 @@ async function captureSubmittedCredential(root: ParentNode): Promise<void> {
 }
 
 async function renderPendingSavePrompt(): Promise<void> {
-  const response = await sendRuntimeRequest({ type: "credentials.pendingForSenderOrigin" });
+  const response = await sendRuntimeRequest({
+    type: "credentials.pendingForSenderOrigin",
+  });
 
   if (response.type !== "credentials.pending" || response.credential === null) {
     hideSavePrompt();
@@ -299,7 +321,7 @@ function showSavePrompt(credential: PendingCredential): void {
   hideSavePrompt();
 
   const prompt = document.createElement("div");
-  prompt.className = "firefox-vault-save-prompt";
+  prompt.className = "hvsecrets-save-prompt";
 
   const title = document.createElement("strong");
   title.textContent = "Save login?";
@@ -308,7 +330,7 @@ function showSavePrompt(credential: PendingCredential): void {
   username.textContent = credential.username;
 
   const actions = document.createElement("div");
-  actions.className = "firefox-vault-actions";
+  actions.className = "hvsecrets-actions";
 
   const saveButton = document.createElement("button");
   saveButton.type = "button";
@@ -343,7 +365,9 @@ function hideSavePrompt(): void {
 }
 
 async function savePendingCredential(): Promise<void> {
-  const response = await sendRuntimeRequest({ type: "credentials.savePendingForSenderOrigin" });
+  const response = await sendRuntimeRequest({
+    type: "credentials.savePendingForSenderOrigin",
+  });
 
   if (response.type === "credentials.saveResult" && response.ok) {
     hideSavePrompt();
@@ -351,7 +375,9 @@ async function savePendingCredential(): Promise<void> {
 }
 
 async function dismissPendingCredential(): Promise<void> {
-  await sendRuntimeRequest({ type: "credentials.dismissPendingForSenderOrigin" });
+  await sendRuntimeRequest({
+    type: "credentials.dismissPendingForSenderOrigin",
+  });
   hideSavePrompt();
 }
 
@@ -367,45 +393,47 @@ function setInputValue(input: HTMLInputElement, value: string): void {
   input.dispatchEvent(new Event("change", { bubbles: true }));
 }
 
-async function sendRuntimeRequest(request: RuntimeRequest): Promise<RuntimeResponse> {
+async function sendRuntimeRequest(
+  request: RuntimeRequest,
+): Promise<RuntimeResponse> {
   return browser.runtime.sendMessage(request) as Promise<RuntimeResponse>;
 }
 
 function installInlineStyles(): void {
-  if (document.getElementById("firefox-vault-inline-styles") !== null) {
+  if (document.getElementById("hvsecrets-inline-styles") !== null) {
     return;
   }
 
   const style = document.createElement("style");
-  style.id = "firefox-vault-inline-styles";
+  style.id = "hvsecrets-inline-styles";
   style.textContent = `
     @media (prefers-color-scheme: light) {
       :root {
-        --firefox-vault-bg: #ffffff;
-        --firefox-vault-fg: #111111;
-        --firefox-vault-border: #8a8f98;
-        --firefox-vault-hover: #e8f0fe;
-        --firefox-vault-shadow: rgb(0 0 0 / 18%);
+        --hvsecrets-bg: #ffffff;
+        --hvsecrets-fg: #111111;
+        --hvsecrets-border: #8a8f98;
+        --hvsecrets-hover: #e8f0fe;
+        --hvsecrets-shadow: rgb(0 0 0 / 18%);
       }
     }
 
     @media (prefers-color-scheme: dark) {
       :root {
-        --firefox-vault-bg: #1d211c;
-        --firefox-vault-fg: #f4f5f0;
-        --firefox-vault-border: #60685d;
-        --firefox-vault-hover: #2d3a31;
-        --firefox-vault-shadow: rgb(0 0 0 / 42%);
+        --hvsecrets-bg: #1d211c;
+        --hvsecrets-fg: #f4f5f0;
+        --hvsecrets-border: #60685d;
+        --hvsecrets-hover: #2d3a31;
+        --hvsecrets-shadow: rgb(0 0 0 / 42%);
       }
     }
 
-    .firefox-vault-menu {
-      background: var(--firefox-vault-bg);
-      border: 1px solid var(--firefox-vault-border);
+    .hvsecrets-menu {
+      background: var(--hvsecrets-bg);
+      border: 1px solid var(--hvsecrets-border);
       border-radius: 4px;
-      box-shadow: 0 8px 24px var(--firefox-vault-shadow);
+      box-shadow: 0 8px 24px var(--hvsecrets-shadow);
       box-sizing: border-box;
-      color: var(--firefox-vault-fg);
+      color: var(--hvsecrets-fg);
       display: grid;
       font: 14px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       gap: 2px;
@@ -415,30 +443,30 @@ function installInlineStyles(): void {
       z-index: 2147483647;
     }
 
-    .firefox-vault-menu button,
-    .firefox-vault-save-prompt button {
-      background: var(--firefox-vault-bg);
+    .hvsecrets-menu button,
+    .hvsecrets-save-prompt button {
+      background: var(--hvsecrets-bg);
       border: 0;
       border-radius: 3px;
-      color: var(--firefox-vault-fg);
+      color: var(--hvsecrets-fg);
       cursor: pointer;
       font: inherit;
       padding: 8px 10px;
       text-align: left;
     }
 
-    .firefox-vault-menu button:hover,
-    .firefox-vault-save-prompt button:hover {
-      background: var(--firefox-vault-hover);
+    .hvsecrets-menu button:hover,
+    .hvsecrets-save-prompt button:hover {
+      background: var(--hvsecrets-hover);
     }
 
-    .firefox-vault-save-prompt {
-      background: var(--firefox-vault-bg);
-      border: 1px solid var(--firefox-vault-border);
+    .hvsecrets-save-prompt {
+      background: var(--hvsecrets-bg);
+      border: 1px solid var(--hvsecrets-border);
       border-radius: 6px;
       bottom: 20px;
-      box-shadow: 0 8px 24px var(--firefox-vault-shadow);
-      color: var(--firefox-vault-fg);
+      box-shadow: 0 8px 24px var(--hvsecrets-shadow);
+      color: var(--hvsecrets-fg);
       display: grid;
       font: 14px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       gap: 8px;
@@ -449,7 +477,7 @@ function installInlineStyles(): void {
       z-index: 2147483647;
     }
 
-    .firefox-vault-actions {
+    .hvsecrets-actions {
       display: flex;
       gap: 8px;
       justify-content: flex-end;

@@ -3,12 +3,12 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Firefox Vault Options</title>
+    <title>HVSecrets Options</title>
     <script type="module" src="/src/options/index.ts"></script>
   </head>
   <body>
     <main>
-      <h1>Firefox Vault Options</h1>
+      <h1>HVSecrets Options</h1>
       <form id="options-form">
         <label>
           Vault URL
@@ -24,7 +24,11 @@
         </label>
         <label>
           Vault namespace
-          <input id="vault-namespace" name="vaultNamespace" autocomplete="off" />
+          <input
+            id="vault-namespace"
+            name="vaultNamespace"
+            autocomplete="off"
+          />
         </label>
         <fieldset>
           <legend>Authentication</legend>
@@ -40,7 +44,12 @@
         <section id="token-fields">
           <label>
             Vault token
-            <input id="vault-token" name="vaultToken" type="password" autocomplete="off" />
+            <input
+              id="vault-token"
+              name="vaultToken"
+              type="password"
+              autocomplete="off"
+            />
           </label>
           <label class="inline">
             <input id="clear-token" name="clearToken" type="checkbox" />
@@ -50,7 +59,11 @@
         <section id="oidc-fields">
           <label>
             OIDC auth mount
-            <input id="oidc-auth-mount" name="oidcAuthMount" autocomplete="off" />
+            <input
+              id="oidc-auth-mount"
+              name="oidcAuthMount"
+              autocomplete="off"
+            />
           </label>
           <label>
             OIDC role

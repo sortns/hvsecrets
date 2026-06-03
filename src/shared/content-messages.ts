@@ -9,7 +9,9 @@ export interface FillCredentialMessage {
   };
 }
 
-export function isFillCredentialMessage(value: unknown): value is FillCredentialMessage {
+export function isFillCredentialMessage(
+  value: unknown,
+): value is FillCredentialMessage {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
     return false;
   }

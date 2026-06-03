@@ -5,7 +5,7 @@ import {
   createCredentialRecord,
   updateCredentialRecord,
   type CredentialRecord,
-  type NewCredentialRecordInput
+  type NewCredentialRecordInput,
 } from "./credential";
 import { joinVaultPath } from "./paths";
 
@@ -13,7 +13,7 @@ export interface CredentialKvClient {
   readonly write: (
     path: string,
     data: Record<string, unknown>,
-    options?: { readonly cas?: number }
+    options?: { readonly cas?: number },
   ) => Promise<unknown>;
   readonly list: (path: string) => Promise<readonly string[]>;
   readonly read: (path: string) => Promise<{
@@ -42,14 +42,14 @@ export interface SaveCredentialInput {
 export class CredentialRepository {
   constructor(
     private readonly client: CredentialKvClient,
-    private readonly basePath: string
+    private readonly basePath: string,
   ) {}
 
   async save(input: SaveCredentialInput): Promise<CredentialSummary> {
     const origin = normalizeOrigin(input.origin);
     const credential = createCredentialRecord({
       ...input,
-      origin
+      origin,
     } satisfies NewCredentialRecordInput);
     const id = randomId();
 
@@ -57,8 +57,8 @@ export class CredentialRepository {
       this.credentialPath(origin, id),
       credential as unknown as Record<string, unknown>,
       {
-        cas: 0
-      }
+        cas: 0,
+      },
     );
 
     return toSummary(id, credential);
@@ -71,7 +71,7 @@ export class CredentialRepository {
     if (existing === null) {
       return this.save({
         ...input,
-        origin
+        origin,
       });
     }
 
@@ -85,13 +85,13 @@ export class CredentialRepository {
 
     const credential = updateCredentialRecord(existing.credential, {
       ...input,
-      origin
+      origin,
     });
 
     await this.client.write(
       this.credentialPath(origin, existing.id),
       credential as unknown as Record<string, unknown>,
-      existing.version === undefined ? undefined : { cas: existing.version }
+      existing.version === undefined ? undefined : { cas: existing.version },
     );
 
     return toSummary(existing.id, credential);
@@ -104,7 +104,9 @@ export class CredentialRepository {
     return existing !== null && existing.credential.password === input.password;
   }
 
-  async listForOrigin(originInput: string): Promise<readonly CredentialSummary[]> {
+  async listForOrigin(
+    originInput: string,
+  ): Promise<readonly CredentialSummary[]> {
     const origin = normalizeOrigin(originInput);
     const basePath = this.originCredentialsPath(origin);
     let keys: readonly string[];
@@ -119,20 +121,25 @@ export class CredentialRepository {
     const credentials = await Promise.all(
       credentialIds.map(async (id): Promise<CredentialSummary | null> => {
         try {
-          const result = await this.client.read(this.credentialPath(origin, id));
+          const result = await this.client.read(
+            this.credentialPath(origin, id),
+          );
           assertCredentialRecord(result.data);
 
           return toSummary(id, result.data);
         } catch {
           return null;
         }
-      })
+      }),
     );
 
     return credentials.filter((credential) => credential !== null);
   }
 
-  async getForOrigin(originInput: string, id: string): Promise<CredentialRecord | null> {
+  async getForOrigin(
+    originInput: string,
+    id: string,
+  ): Promise<CredentialRecord | null> {
     const origin = normalizeOrigin(originInput);
 
     try {
@@ -150,7 +157,11 @@ export class CredentialRepository {
   }
 
   private originCredentialsPath(origin: string): string {
-    return joinVaultPath(this.basePath, "credentials", originPathSegment(origin));
+    return joinVaultPath(
+      this.basePath,
+      "credentials",
+      originPathSegment(origin),
+    );
   }
 
   private credentialPath(origin: string, id: string): string {
@@ -159,21 +170,25 @@ export class CredentialRepository {
 
   private async findByUsername(
     origin: string,
-    username: string
+    username: string,
   ): Promise<{
     readonly id: string;
     readonly credential: CredentialRecord;
     readonly version?: number;
   } | null> {
     const credentials = await this.listForOrigin(origin);
-    const matchingCredential = credentials.find((credential) => credential.username === username);
+    const matchingCredential = credentials.find(
+      (credential) => credential.username === username,
+    );
 
     if (matchingCredential === undefined) {
       return null;
     }
 
     try {
-      const result = await this.client.read(this.credentialPath(origin, matchingCredential.id));
+      const result = await this.client.read(
+        this.credentialPath(origin, matchingCredential.id),
+      );
       assertCredentialRecord(result.data);
 
       if (result.data.origin !== origin || result.data.username !== username) {
@@ -183,7 +198,7 @@ export class CredentialRepository {
       return {
         id: matchingCredential.id,
         credential: result.data,
-        version: result.metadata?.version
+        version: result.metadata?.version,
       };
     } catch {
       return null;
@@ -191,13 +206,16 @@ export class CredentialRepository {
   }
 }
 
-function toSummary(id: string, credential: CredentialRecord): CredentialSummary {
+function toSummary(
+  id: string,
+  credential: CredentialRecord,
+): CredentialSummary {
   return {
     id,
     origin: credential.origin,
     username: credential.username,
     url: credential.url,
     title: credential.title,
-    updated_at: credential.updated_at
+    updated_at: credential.updated_at,
   };
 }

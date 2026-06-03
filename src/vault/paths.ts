@@ -19,7 +19,9 @@ export function normalizeVaultPath(input: string): string {
 }
 
 export function joinVaultPath(...parts: string[]): string {
-  return normalizeVaultPath(parts.filter((part) => part.trim().length > 0).join("/"));
+  return normalizeVaultPath(
+    parts.filter((part) => part.trim().length > 0).join("/"),
+  );
 }
 
 export function normalizeVaultUrl(input: string): string {

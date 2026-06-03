@@ -12,13 +12,15 @@ describe("background request handlers", () => {
     const response = await handleRuntimeRequest(
       { type: "config.get" },
       createMemoryStorage(),
-      createTabsApi({})
+      createTabsApi({}),
     );
 
     expect(response.type).toBe("config.state");
     if (response.type === "config.state") {
       expect(response.validation.ok).toBe(false);
-      expect(response.validation.errors).toContain("Vault token is required for token auth");
+      expect(response.validation.errors).toContain(
+        "Vault token is required for token auth",
+      );
     }
   });
 
@@ -26,13 +28,13 @@ describe("background request handlers", () => {
     const response = await handleRuntimeRequest(
       { type: "auth.validateToken" },
       createMemoryStorage(),
-      createTabsApi({})
+      createTabsApi({}),
     );
 
     expect(response).toEqual({
       type: "auth.validationResult",
       ok: false,
-      error: "Vault token is not configured"
+      error: "Vault token is not configured",
     });
   });
 
@@ -40,13 +42,13 @@ describe("background request handlers", () => {
     const response = await handleRuntimeRequest(
       { type: "auth.loginOidc" },
       createMemoryStorage(),
-      createTabsApi({})
+      createTabsApi({}),
     );
 
     expect(response).toEqual({
       type: "auth.oidcLoginResult",
       ok: false,
-      error: "OIDC browser tab flow is not available"
+      error: "OIDC browser tab flow is not available",
     });
   });
 
@@ -54,14 +56,14 @@ describe("background request handlers", () => {
     const response = await handleRuntimeRequest(
       { type: "credentials.listForCurrentTab" },
       createMemoryStorage(),
-      createTabsApi({ url: "about:config" })
+      createTabsApi({ url: "about:config" }),
     );
 
     expect(response).toEqual({
       type: "credentials.list",
       origin: null,
       credentials: [],
-      error: "Current tab does not have a fillable URL"
+      error: "Current tab does not have a fillable URL",
     });
   });
 
@@ -70,30 +72,31 @@ describe("background request handlers", () => {
       [configStorageKey]: {
         vaultUrl: "http://vault.example",
         kvMount: "secret",
-        basePath: "firefox-vault",
+        basePath: "hvsecrets",
         authMode: "oidc",
         oidcAuthMount: "oidc",
-        oidcRole: "firefox-vault",
-        vaultNamespace: ""
-      }
+        oidcRole: "hvsecrets",
+        vaultNamespace: "",
+      },
     });
     const fetchImpl = vi
       .fn<typeof fetch>()
       .mockResolvedValueOnce(
         jsonResponse({
           data: {
-            auth_url: "https://idp.example/authorize?nonce=vault-nonce&state=vault-state"
-          }
-        })
+            auth_url:
+              "https://idp.example/authorize?nonce=vault-nonce&state=vault-state",
+          },
+        }),
       )
       .mockResolvedValueOnce(
         jsonResponse({
           auth: {
             client_token: "oidc-token",
             lease_duration: 3600,
-            renewable: true
-          }
-        })
+            renewable: true,
+          },
+        }),
       );
     vi.stubGlobal("fetch", fetchImpl);
 
@@ -104,8 +107,8 @@ describe("background request handlers", () => {
       {},
       {
         openAuthUrlAndWaitForCallback: (_authUrl, callbackUrlPrefix) =>
-          Promise.resolve(`${callbackUrlPrefix}?code=code&state=state`)
-      }
+          Promise.resolve(`${callbackUrlPrefix}?code=code&state=state`),
+      },
     );
 
     expect(response).toEqual(
@@ -113,17 +116,17 @@ describe("background request handlers", () => {
         type: "auth.oidcLoginResult",
         ok: true,
         renewable: true,
-        redirectUri: "http://localhost:8250/oidc/callback"
-      })
+        redirectUri: "http://localhost:8250/oidc/callback",
+      }),
     );
-    const storedSecrets = (await storage.get(secretsStorageKey))[secretsStorageKey] as
-      | Record<string, unknown>
-      | undefined;
+    const storedSecrets = (await storage.get(secretsStorageKey))[
+      secretsStorageKey
+    ] as Record<string, unknown> | undefined;
     expect(storedSecrets).toEqual(
       expect.objectContaining({
         vaultToken: "oidc-token",
-        tokenRenewable: true
-      })
+        tokenRenewable: true,
+      }),
     );
   });
 });
@@ -139,11 +142,13 @@ function createTabsApi(tab: {
     },
     sendMessage() {
       return Promise.resolve(undefined);
-    }
+    },
   };
 }
 
-function createMemoryStorage(initial: Record<string, unknown> = {}): ExtensionStorageArea {
+function createMemoryStorage(
+  initial: Record<string, unknown> = {},
+): ExtensionStorageArea {
   const values = { ...initial };
 
   return {
@@ -153,14 +158,19 @@ function createMemoryStorage(initial: Record<string, unknown> = {}): ExtensionSt
       }
 
       if (Array.isArray(keys)) {
-        return Promise.resolve(Object.fromEntries(keys.map((key) => [key, values[key]])));
+        return Promise.resolve(
+          Object.fromEntries(keys.map((key) => [key, values[key]])),
+        );
       }
 
       if (keys !== null && typeof keys === "object") {
         return Promise.resolve(
           Object.fromEntries(
-            Object.entries(keys).map(([key, defaultValue]) => [key, values[key] ?? defaultValue])
-          )
+            Object.entries(keys).map(([key, defaultValue]) => [
+              key,
+              values[key] ?? defaultValue,
+            ]),
+          ),
         );
       }
 
@@ -169,7 +179,7 @@ function createMemoryStorage(initial: Record<string, unknown> = {}): ExtensionSt
     set(items: Record<string, unknown>) {
       Object.assign(values, items);
       return Promise.resolve();
-    }
+    },
   };
 }
 
@@ -177,7 +187,7 @@ function jsonResponse(body: unknown): Response {
   return new Response(JSON.stringify(body), {
     status: 200,
     headers: {
-      "content-type": "application/json"
-    }
+      "content-type": "application/json",
+    },
   });
 }

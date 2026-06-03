@@ -7,17 +7,17 @@ import {
   type ExtensionConfig,
   type ExtensionConfigInput,
   type ExtensionSecrets,
-  type TokenState
+  type TokenState,
 } from "../shared/config";
 import { normalizeOrigin } from "../shared/origin";
 import type { PendingCredential } from "../shared/pending-credential";
 
-export const pendingCredentialStorageKey = "firefoxVault.pendingCredentials";
-export const ignoredOriginsStorageKey = "firefoxVault.ignoredOrigins";
+export const pendingCredentialStorageKey = "hvSecrets.pendingCredentials";
+export const ignoredOriginsStorageKey = "hvSecrets.ignoredOrigins";
 
 export interface ExtensionStorageArea {
   readonly get: (
-    keys?: string | string[] | Record<string, unknown> | null
+    keys?: string | string[] | Record<string, unknown> | null,
   ) => Promise<Record<string, unknown>>;
   readonly set: (items: Record<string, unknown>) => Promise<void>;
 }
@@ -34,7 +34,9 @@ export interface SaveVaultTokenRequest {
   readonly renewable?: boolean;
 }
 
-export async function getConfig(storage: ExtensionStorageArea): Promise<ExtensionConfig> {
+export async function getConfig(
+  storage: ExtensionStorageArea,
+): Promise<ExtensionConfig> {
   const secrets = await getSecrets(storage);
   const stored = await storage.get(configStorageKey);
   const maybeConfig = stored[configStorageKey];
@@ -42,19 +44,19 @@ export async function getConfig(storage: ExtensionStorageArea): Promise<Extensio
   if (!isStoredConfig(maybeConfig)) {
     return {
       ...defaultConfig,
-      ...tokenStateFromSecrets(secrets)
+      ...tokenStateFromSecrets(secrets),
     };
   }
 
   return redactConfig({
     ...maybeConfig,
-    ...tokenStateFromSecrets(secrets)
+    ...tokenStateFromSecrets(secrets),
   });
 }
 
 export async function saveConfig(
   storage: ExtensionStorageArea,
-  request: SaveConfigRequest
+  request: SaveConfigRequest,
 ): Promise<ExtensionConfig> {
   const existingSecrets = await getSecrets(storage);
   const requestedToken = request.vaultToken?.trim();
@@ -73,20 +75,29 @@ export async function saveConfig(
       ? {}
       : {
           vaultToken: nextToken,
-          tokenExpiresAt: isNewToken ? null : (existingSecrets.tokenExpiresAt ?? null),
-          tokenRenewable: isNewToken ? false : (existingSecrets.tokenRenewable ?? false)
+          tokenExpiresAt: isNewToken
+            ? null
+            : (existingSecrets.tokenExpiresAt ?? null),
+          tokenRenewable: isNewToken
+            ? false
+            : (existingSecrets.tokenRenewable ?? false),
         };
-  const nextConfig = normalizeConfig(request.config, tokenStateFromSecrets(nextSecrets));
+  const nextConfig = normalizeConfig(
+    request.config,
+    tokenStateFromSecrets(nextSecrets),
+  );
 
   await storage.set({
     [configStorageKey]: nextConfig,
-    [secretsStorageKey]: nextSecrets
+    [secretsStorageKey]: nextSecrets,
   });
 
   return redactConfig(nextConfig);
 }
 
-export async function getSecrets(storage: ExtensionStorageArea): Promise<ExtensionSecrets> {
+export async function getSecrets(
+  storage: ExtensionStorageArea,
+): Promise<ExtensionSecrets> {
   const stored = await storage.get(secretsStorageKey);
   const maybeSecrets = stored[secretsStorageKey];
 
@@ -99,7 +110,7 @@ export async function getSecrets(storage: ExtensionStorageArea): Promise<Extensi
 
 export async function saveVaultToken(
   storage: ExtensionStorageArea,
-  request: SaveVaultTokenRequest
+  request: SaveVaultTokenRequest,
 ): Promise<void> {
   const existingSecrets = await getSecrets(storage);
   const tokenExpiresAt =
@@ -112,28 +123,28 @@ export async function saveVaultToken(
       ...existingSecrets,
       vaultToken: request.token,
       tokenExpiresAt,
-      tokenRenewable: request.renewable ?? false
-    }
+      tokenRenewable: request.renewable ?? false,
+    },
   });
 }
 
 export async function savePendingCredential(
   storage: ExtensionStorageArea,
-  credential: PendingCredential
+  credential: PendingCredential,
 ): Promise<void> {
   const pending = await getPendingCredentials(storage);
 
   await storage.set({
     [pendingCredentialStorageKey]: {
       ...pending,
-      [credential.origin]: credential
-    }
+      [credential.origin]: credential,
+    },
   });
 }
 
 export async function getPendingCredential(
   storage: ExtensionStorageArea,
-  origin: string
+  origin: string,
 ): Promise<PendingCredential | null> {
   const pending = await getPendingCredentials(storage);
 
@@ -142,20 +153,22 @@ export async function getPendingCredential(
 
 export async function deletePendingCredential(
   storage: ExtensionStorageArea,
-  origin: string
+  origin: string,
 ): Promise<void> {
   const pending = await getPendingCredentials(storage);
   const nextPending = Object.fromEntries(
-    Object.entries(pending).filter(([pendingOrigin]) => pendingOrigin !== origin)
+    Object.entries(pending).filter(
+      ([pendingOrigin]) => pendingOrigin !== origin,
+    ),
   );
 
   await storage.set({
-    [pendingCredentialStorageKey]: nextPending
+    [pendingCredentialStorageKey]: nextPending,
   });
 }
 
 export async function listIgnoredOrigins(
-  storage: ExtensionStorageArea
+  storage: ExtensionStorageArea,
 ): Promise<readonly string[]> {
   const ignoredOrigins = await getIgnoredOriginSet(storage);
 
@@ -164,14 +177,14 @@ export async function listIgnoredOrigins(
 
 export async function addIgnoredOrigin(
   storage: ExtensionStorageArea,
-  originInput: string
+  originInput: string,
 ): Promise<readonly string[]> {
   const origin = normalizeOrigin(originInput);
   const ignoredOrigins = await getIgnoredOriginSet(storage);
   ignoredOrigins.add(origin);
 
   await storage.set({
-    [ignoredOriginsStorageKey]: [...ignoredOrigins].sort()
+    [ignoredOriginsStorageKey]: [...ignoredOrigins].sort(),
   });
   await deletePendingCredential(storage, origin);
 
@@ -180,14 +193,14 @@ export async function addIgnoredOrigin(
 
 export async function removeIgnoredOrigin(
   storage: ExtensionStorageArea,
-  originInput: string
+  originInput: string,
 ): Promise<readonly string[]> {
   const origin = normalizeOrigin(originInput);
   const ignoredOrigins = await getIgnoredOriginSet(storage);
   ignoredOrigins.delete(origin);
 
   await storage.set({
-    [ignoredOriginsStorageKey]: [...ignoredOrigins].sort()
+    [ignoredOriginsStorageKey]: [...ignoredOrigins].sort(),
   });
 
   return [...ignoredOrigins].sort();
@@ -195,7 +208,7 @@ export async function removeIgnoredOrigin(
 
 export async function isIgnoredOrigin(
   storage: ExtensionStorageArea,
-  originInput: string
+  originInput: string,
 ): Promise<boolean> {
   const origin = normalizeOrigin(originInput);
   const ignoredOrigins = await getIgnoredOriginSet(storage);
@@ -204,14 +217,16 @@ export async function isIgnoredOrigin(
 }
 
 function hasUsableToken(secrets: ExtensionSecrets): boolean {
-  return secrets.vaultToken !== undefined && secrets.vaultToken.trim().length > 0;
+  return (
+    secrets.vaultToken !== undefined && secrets.vaultToken.trim().length > 0
+  );
 }
 
 function tokenStateFromSecrets(secrets: ExtensionSecrets): TokenState {
   return {
     hasToken: hasUsableToken(secrets),
     tokenExpiresAt: secrets.tokenExpiresAt ?? null,
-    tokenRenewable: secrets.tokenRenewable ?? false
+    tokenRenewable: secrets.tokenRenewable ?? false,
   };
 }
 
@@ -238,12 +253,13 @@ function isStoredSecrets(value: unknown): value is ExtensionSecrets {
     (value.tokenExpiresAt === undefined ||
       value.tokenExpiresAt === null ||
       typeof value.tokenExpiresAt === "string") &&
-    (value.tokenRenewable === undefined || typeof value.tokenRenewable === "boolean")
+    (value.tokenRenewable === undefined ||
+      typeof value.tokenRenewable === "boolean")
   );
 }
 
 async function getPendingCredentials(
-  storage: ExtensionStorageArea
+  storage: ExtensionStorageArea,
 ): Promise<Record<string, PendingCredential>> {
   const stored = await storage.get(pendingCredentialStorageKey);
   const value = stored[pendingCredentialStorageKey];
@@ -263,7 +279,9 @@ async function getPendingCredentials(
   return pending;
 }
 
-async function getIgnoredOriginSet(storage: ExtensionStorageArea): Promise<Set<string>> {
+async function getIgnoredOriginSet(
+  storage: ExtensionStorageArea,
+): Promise<Set<string>> {
   const stored = await storage.get(ignoredOriginsStorageKey);
   const value = stored[ignoredOriginsStorageKey];
 

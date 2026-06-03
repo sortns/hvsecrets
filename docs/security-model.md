@@ -1,4 +1,4 @@
-# Firefox Vault Security Model
+# HVSecrets Security Model
 
 ## Boundaries
 

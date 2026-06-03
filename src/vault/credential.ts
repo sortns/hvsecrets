@@ -29,7 +29,9 @@ export interface NewCredentialRecordInput {
   readonly notes?: string;
 }
 
-export function createCredentialRecord(input: NewCredentialRecordInput): CredentialRecord {
+export function createCredentialRecord(
+  input: NewCredentialRecordInput,
+): CredentialRecord {
   const timestamp = nowIsoString();
 
   return {
@@ -43,13 +45,13 @@ export function createCredentialRecord(input: NewCredentialRecordInput): Credent
     created_at: timestamp,
     updated_at: timestamp,
     tags: input.tags ?? [],
-    notes: input.notes ?? ""
+    notes: input.notes ?? "",
   };
 }
 
 export function updateCredentialRecord(
   current: CredentialRecord,
-  input: NewCredentialRecordInput
+  input: NewCredentialRecordInput,
 ): CredentialRecord {
   return {
     ...current,
@@ -58,7 +60,7 @@ export function updateCredentialRecord(
     password: input.password,
     url: input.url,
     title: input.title ?? "",
-    updated_at: nowIsoString()
+    updated_at: nowIsoString(),
   };
 }
 
@@ -83,7 +85,9 @@ export function isCredentialRecord(value: unknown): value is CredentialRecord {
   );
 }
 
-export function assertCredentialRecord(value: unknown): asserts value is CredentialRecord {
+export function assertCredentialRecord(
+  value: unknown,
+): asserts value is CredentialRecord {
   if (!isCredentialRecord(value)) {
     throw new Error("Invalid credential record schema");
   }

@@ -40,7 +40,9 @@ async function loadState(): Promise<void> {
   vaultPathElement.textContent = `${response.config.kvMount}/${response.config.basePath}`;
   authStateElement.textContent = authStateText(response.config);
   oidcLoginButton.hidden = response.config.authMode !== "oidc";
-  setStatus(response.validation.ok ? "Ready" : response.validation.errors.join(". "));
+  setStatus(
+    response.validation.ok ? "Ready" : response.validation.errors.join(". "),
+  );
 
   if (response.validation.ok) {
     void checkConnection();
@@ -53,7 +55,9 @@ async function refreshCredentialState(): Promise<void> {
 }
 
 async function loadCredentials(): Promise<void> {
-  const response = await sendRuntimeRequest({ type: "credentials.listForCurrentTab" });
+  const response = await sendRuntimeRequest({
+    type: "credentials.listForCurrentTab",
+  });
 
   if (response.type !== "credentials.list") {
     setStatus("Unable to load credentials");
@@ -61,21 +65,24 @@ async function loadCredentials(): Promise<void> {
   }
 
   renderCredentials(response.credentials);
-  setStatus(response.error ?? `Found ${String(response.credentials.length)} credential(s)`);
+  setStatus(
+    response.error ??
+      `Found ${String(response.credentials.length)} credential(s)`,
+  );
 }
 
 async function fillCredential(credentialId: string): Promise<void> {
   setStatus("Filling credential");
   const response = await sendRuntimeRequest({
     type: "credentials.fillCurrentTab",
-    credentialId
+    credentialId,
   });
 
   if (response.type !== "credentials.fillResult" || !response.ok) {
     setStatus(
       response.type === "credentials.fillResult" && response.error !== undefined
         ? response.error
-        : "Unable to fill credential"
+        : "Unable to fill credential",
     );
     return;
   }
@@ -99,7 +106,7 @@ async function checkConnection(): Promise<void> {
   setStatus(
     response.ok
       ? "Vault connection is healthy; token is valid"
-      : (response.error ?? "Vault connection or token validation failed")
+      : (response.error ?? "Vault connection or token validation failed"),
   );
 }
 
@@ -112,7 +119,11 @@ async function loginWithOidc(): Promise<void> {
     return;
   }
 
-  setStatus(response.ok ? "OIDC login succeeded" : (response.error ?? "OIDC login failed"));
+  setStatus(
+    response.ok
+      ? "OIDC login succeeded"
+      : (response.error ?? "OIDC login failed"),
+  );
   await loadState();
 }
 
@@ -165,7 +176,9 @@ function authStateText(config: ExtensionConfig): string {
   return `OIDC token until ${new Date(config.tokenExpiresAt).toLocaleString()}`;
 }
 
-async function sendRuntimeRequest(request: RuntimeRequest): Promise<RuntimeResponse> {
+async function sendRuntimeRequest(
+  request: RuntimeRequest,
+): Promise<RuntimeResponse> {
   return browser.runtime.sendMessage(request) as Promise<RuntimeResponse>;
 }
 

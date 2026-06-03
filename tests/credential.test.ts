@@ -3,7 +3,7 @@ import {
   assertCredentialRecord,
   createCredentialRecord,
   credentialSchemaVersion,
-  isCredentialRecord
+  isCredentialRecord,
 } from "../src/vault/credential";
 
 describe("credential schema", () => {
@@ -12,7 +12,7 @@ describe("credential schema", () => {
       origin: "https://example.com",
       username: "alice@example.com",
       password: "password",
-      url: "https://example.com/login"
+      url: "https://example.com/login",
     });
 
     expect(credential.schema).toBe(credentialSchemaVersion);
@@ -22,7 +22,12 @@ describe("credential schema", () => {
   });
 
   it("rejects malformed records", () => {
-    expect(isCredentialRecord({ schema: credentialSchemaVersion, username: "alice" })).toBe(false);
+    expect(
+      isCredentialRecord({
+        schema: credentialSchemaVersion,
+        username: "alice",
+      }),
+    ).toBe(false);
     expect(() => {
       assertCredentialRecord({ schema: 2 });
     }).toThrow("Invalid credential record schema");

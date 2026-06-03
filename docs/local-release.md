@@ -47,7 +47,7 @@ For a local/dev Vault where the current `VAULT_TOKEN` can manage mounts and poli
 ```sh
 export VAULT_ADDR='http://127.0.0.1:8200'
 export VAULT_TOKEN='...'
-VAULT_KV_MOUNT='firefox' VAULT_BASE_PATH='firefox-vault' ./scripts/setup-demo-vault.sh
+VAULT_KV_MOUNT='firefox' VAULT_BASE_PATH='hvsecrets' ./scripts/setup-demo-vault.sh
 ```
 
 The script enables a KV v2 mount if needed and writes a narrow policy for the configured base path.

@@ -36,20 +36,20 @@ export interface ConfigValidationResult {
   readonly errors: readonly string[];
 }
 
-export const configStorageKey = "firefoxVault.config";
-export const secretsStorageKey = "firefoxVault.secrets";
+export const configStorageKey = "hvSecrets.config";
+export const secretsStorageKey = "hvSecrets.secrets";
 
 export const defaultConfig: ExtensionConfig = {
   vaultUrl: envString("VITE_VAULT_URL", "http://127.0.0.1:8200"),
   kvMount: envString("VITE_VAULT_KV_MOUNT", "secret"),
-  basePath: envString("VITE_VAULT_BASE_PATH", "firefox-vault"),
+  basePath: envString("VITE_VAULT_BASE_PATH", "hvsecrets"),
   authMode: "token",
   oidcAuthMount: envString("VITE_VAULT_OIDC_AUTH_MOUNT", "oidc"),
-  oidcRole: envString("VITE_VAULT_OIDC_ROLE", "firefox-vault"),
+  oidcRole: envString("VITE_VAULT_OIDC_ROLE", "hvsecrets"),
   vaultNamespace: "",
   hasToken: false,
   tokenExpiresAt: null,
-  tokenRenewable: false
+  tokenRenewable: false,
 };
 
 export interface TokenState {
@@ -60,21 +60,25 @@ export interface TokenState {
 
 export function normalizeConfig(
   input: ExtensionConfigInput,
-  tokenState: TokenState
+  tokenState: TokenState,
 ): ExtensionConfig {
   return {
     vaultUrl: normalizeVaultUrl(input.vaultUrl),
     kvMount: normalizeVaultPath(input.kvMount),
     basePath: normalizeVaultPath(input.basePath),
     authMode: input.authMode,
-    oidcAuthMount: normalizeVaultPath(input.oidcAuthMount ?? defaultConfig.oidcAuthMount),
+    oidcAuthMount: normalizeVaultPath(
+      input.oidcAuthMount ?? defaultConfig.oidcAuthMount,
+    ),
     oidcRole: (input.oidcRole ?? defaultConfig.oidcRole).trim(),
     vaultNamespace: (input.vaultNamespace ?? "").trim(),
-    ...tokenState
+    ...tokenState,
   };
 }
 
-export function validateConfig(config: ExtensionConfig): ConfigValidationResult {
+export function validateConfig(
+  config: ExtensionConfig,
+): ConfigValidationResult {
   const errors: string[] = [];
 
   if (config.authMode === "token" && !config.hasToken) {
@@ -95,14 +99,14 @@ export function validateConfig(config: ExtensionConfig): ConfigValidationResult 
 
   return {
     ok: errors.length === 0,
-    errors
+    errors,
   };
 }
 
 export function redactConfig(config: ExtensionConfig): ExtensionConfig {
   return {
     ...config,
-    hasToken: config.hasToken
+    hasToken: config.hasToken,
   };
 }
 

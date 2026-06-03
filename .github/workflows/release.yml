@@ -46,7 +46,7 @@ jobs:
       - name: Upload unsigned package
         uses: actions/upload-artifact@v4
         with:
-          name: firefox-vault-unsigned
+          name: hvsecrets-unsigned
           path: web-ext-artifacts/*.zip
           if-no-files-found: error
 
@@ -121,7 +121,7 @@ jobs:
           fi
 
           if [ "${AMO_UPLOAD_SOURCE:-false}" = "true" ]; then
-            source_archive="web-ext-artifacts/firefox-vault-source-${GITHUB_REF_NAME}.zip"
+            source_archive="web-ext-artifacts/hvsecrets-source-${GITHUB_REF_NAME}.zip"
             mkdir -p web-ext-artifacts
             git archive --format=zip --output "${source_archive}" HEAD
             args+=(--upload-source-code "${source_archive}")
@@ -132,7 +132,7 @@ jobs:
       - name: Upload signed package
         uses: actions/upload-artifact@v4
         with:
-          name: firefox-vault-signed
+          name: hvsecrets-signed
           path: |
             web-ext-artifacts/*.xpi
             web-ext-artifacts/*.zip
@@ -145,7 +145,7 @@ jobs:
           set -euo pipefail
 
           if ! gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
-            gh release create "${GITHUB_REF_NAME}" --title "${GITHUB_REF_NAME}" --notes "Signed Firefox Vault build."
+            gh release create "${GITHUB_REF_NAME}" --title "${GITHUB_REF_NAME}" --notes "Signed HVSecrets build."
           fi
 
           gh release upload "${GITHUB_REF_NAME}" web-ext-artifacts/* --clobber

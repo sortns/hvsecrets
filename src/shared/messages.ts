@@ -1,13 +1,21 @@
-import type { ExtensionConfig, ExtensionConfigInput, ConfigValidationResult } from "./config";
+import type {
+  ExtensionConfig,
+  ExtensionConfigInput,
+  ConfigValidationResult,
+} from "./config";
 import type { VaultTokenLookupSelfResult } from "../vault/kv-v2-client";
 import type { CredentialSummary } from "../vault/credential-repository";
-import type { CapturedCredentialInput, PendingCredential } from "./pending-credential";
+import type {
+  CapturedCredentialInput,
+  PendingCredential,
+} from "./pending-credential";
 
 const maxUrlLength = 4096;
 const maxTitleLength = 512;
 const maxUsernameLength = 512;
 const maxPasswordLength = 4096;
-const credentialIdPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const credentialIdPattern =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export type RuntimeRequest =
   | { readonly type: "config.get" }
@@ -124,7 +132,10 @@ export function isRuntimeRequest(value: unknown): value is RuntimeRequest {
       return true;
     case "settings.ignoredOrigins.add":
     case "settings.ignoredOrigins.remove":
-      return isBoundedString(value.origin, maxUrlLength, true) && isHttpUrl(value.origin);
+      return (
+        isBoundedString(value.origin, maxUrlLength, true) &&
+        isHttpUrl(value.origin)
+      );
     case "config.save":
       return isConfigSaveRequest(value);
     case "credentials.saveForCurrentTab":
@@ -136,7 +147,10 @@ export function isRuntimeRequest(value: unknown): value is RuntimeRequest {
       return true;
     case "credentials.fillCurrentTab":
     case "credentials.fillSenderOrigin":
-      return typeof value.credentialId === "string" && credentialIdPattern.test(value.credentialId);
+      return (
+        typeof value.credentialId === "string" &&
+        credentialIdPattern.test(value.credentialId)
+      );
     case "credentials.captureLoginAttempt":
       return isCapturedCredentialInput(value.credential);
     default:
@@ -163,7 +177,9 @@ function isConfigSaveRequest(value: Record<string, unknown>): boolean {
   );
 }
 
-function isCapturedCredentialInput(value: unknown): value is CapturedCredentialInput {
+function isCapturedCredentialInput(
+  value: unknown,
+): value is CapturedCredentialInput {
   return (
     isRecord(value) &&
     isBoundedString(value.url, maxUrlLength, true) &&
@@ -187,7 +203,7 @@ function isHttpUrl(value: string): boolean {
 function isBoundedString(
   value: unknown,
   maxLength: number,
-  requireNonBlank: boolean
+  requireNonBlank: boolean,
 ): value is string {
   return (
     typeof value === "string" &&

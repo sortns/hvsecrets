@@ -11,9 +11,9 @@ describe("runtime message validation", () => {
           url: "https://example.com/login",
           title: "Example",
           username: "alice",
-          password: "secret"
-        }
-      })
+          password: "secret",
+        },
+      }),
     ).toBe(true);
   });
 
@@ -25,9 +25,9 @@ describe("runtime message validation", () => {
           url: "javascript:alert(1)",
           title: "Example",
           username: "alice",
-          password: "secret"
-        }
-      })
+          password: "secret",
+        },
+      }),
     ).toBe(false);
   });
 
@@ -35,8 +35,8 @@ describe("runtime message validation", () => {
     expect(
       isRuntimeRequest({
         type: "credentials.fillSenderOrigin",
-        credentialId: "../secret"
-      })
+        credentialId: "../secret",
+      }),
     ).toBe(false);
   });
 
@@ -45,8 +45,8 @@ describe("runtime message validation", () => {
       isRuntimeRequest({
         type: "credentials.saveForCurrentTab",
         username: "alice",
-        password: "x".repeat(4097)
-      })
+        password: "x".repeat(4097),
+      }),
     ).toBe(false);
   });
 
@@ -54,14 +54,14 @@ describe("runtime message validation", () => {
     expect(
       isRuntimeRequest({
         type: "settings.ignoredOrigins.add",
-        origin: "https://example.com/login"
-      })
+        origin: "https://example.com/login",
+      }),
     ).toBe(true);
     expect(
       isRuntimeRequest({
         type: "settings.ignoredOrigins.add",
-        origin: "javascript:alert(1)"
-      })
+        origin: "javascript:alert(1)",
+      }),
     ).toBe(false);
   });
 
@@ -71,18 +71,18 @@ describe("runtime message validation", () => {
         type: "content.fillCredential",
         credential: {
           username: "alice",
-          password: "secret"
-        }
-      })
+          password: "secret",
+        },
+      }),
     ).toBe(true);
     expect(
       isFillCredentialMessage({
         type: "content.fillCredential",
         credential: {
           username: "alice",
-          password: "x".repeat(4097)
-        }
-      })
+          password: "x".repeat(4097),
+        },
+      }),
     ).toBe(false);
   });
 });

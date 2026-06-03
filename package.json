@@ -1,9 +1,9 @@
 {
-  "name": "firefox-vault",
-  "version": "0.0.0",
+  "name": "hvsecrets",
+  "version": "0.0.1",
   "private": true,
   "type": "module",
-  "description": "Firefox WebExtension password-manager workflow backed by HashiCorp Vault KV.",
+  "description": "Browser extension password-manager workflow backed by HashiCorp Vault KV.",
   "scripts": {
     "build": "tsc --noEmit && vite build",
     "dev": "vite build --watch",

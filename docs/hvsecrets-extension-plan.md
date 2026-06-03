@@ -1,4 +1,4 @@
-# Firefox Vault Extension Plan
+# HVSecrets Extension Plan
 
 ## Goal
 
@@ -192,11 +192,11 @@ The token or OIDC role should only access the configured secret path.
 Example policy:
 
 ```hcl
-path "secret/data/firefox-vault/*" {
+path "secret/data/hvsecrets/*" {
   capabilities = ["create", "read", "update", "delete"]
 }
 
-path "secret/metadata/firefox-vault/*" {
+path "secret/metadata/hvsecrets/*" {
   capabilities = ["list", "read", "delete"]
 }
 ```
@@ -283,18 +283,33 @@ For a public-grade version, consider a native companion that stores tokens in th
 ## Key Questions
 
 1. Should the first version support only KV v2, or is KV v1 compatibility required?
-  - kv2 support
+
+- kv2 support
+
 2. Is this for a single user/team, or should it be designed as a community extension from the start?
-  - it is a single person, but after 1st successfull release we will publish the repo  
+
+- it is a single person, but after 1st successfull release we will publish the repo
+
 3. Should the extension request access to all sites, or require users to enable autofill per site?
-  - We should not anooying user each time asking the permissions.SO if need any site so let it be.
+
+- We should not anooying user each time asking the permissions.SO if need any site so let it be.
+
 4. For OIDC, is Vault already configured with an OIDC role?
-  - yes
+
+- yes
+
 5. If Vault OIDC is already configured, what is the auth mount path and expected redirect URI?
-  - it should be configurable, as each vault might have its own path
+
+- it should be configurable, as each vault might have its own path
+
 6. Should secrets be stored as plaintext in Vault KV, or should the extension use client-side encryption before writing to Vault?
-  - plaint text in vault
+
+- plaint text in vault
+
 7. Is import from Firefox's existing saved passwords required, or only new saves going forward?
-  - Yes, it will be great to have it. 
+
+- Yes, it will be great to have it.
+
 8. Is a native companion app for OS keychain token storage required, or is extension-local token storage acceptable for the development version?
-  - For the develop we might use some token, but in long term we might use OS keychain
+
+- For the develop we might use some token, but in long term we might use OS keychain

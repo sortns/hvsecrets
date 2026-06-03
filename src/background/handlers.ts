@@ -18,7 +18,7 @@ import {
   saveConfig,
   savePendingCredential,
   saveVaultToken,
-  type ExtensionStorageArea
+  type ExtensionStorageArea,
 } from "./storage";
 
 export interface ExtensionTabsApi {
@@ -32,7 +32,7 @@ export interface ExtensionTabsApi {
 export interface ExtensionOidcTabFlowApi {
   readonly openAuthUrlAndWaitForCallback: (
     authUrl: string,
-    callbackUrlPrefix: string
+    callbackUrlPrefix: string,
   ) => Promise<string>;
 }
 
@@ -47,7 +47,7 @@ export async function handleRuntimeRequest(
   storage: ExtensionStorageArea,
   tabs: ExtensionTabsApi,
   sender: ExtensionMessageSender = {},
-  oidcTabFlow?: ExtensionOidcTabFlowApi
+  oidcTabFlow?: ExtensionOidcTabFlowApi,
 ): Promise<RuntimeResponse> {
   switch (request.type) {
     case "config.get":
@@ -58,7 +58,7 @@ export async function handleRuntimeRequest(
       return {
         type: "config.state",
         config,
-        validation: validateConfig(config)
+        validation: validateConfig(config),
       };
     }
     case "auth.validateToken":
@@ -76,13 +76,23 @@ export async function handleRuntimeRequest(
     case "credentials.listForSenderOrigin":
       return listCredentialsForSenderOrigin(storage, sender);
     case "credentials.saveForCurrentTab":
-      return saveCredentialForCurrentTab(storage, tabs, request.username, request.password);
+      return saveCredentialForCurrentTab(
+        storage,
+        tabs,
+        request.username,
+        request.password,
+      );
     case "credentials.fillCurrentTab":
       return fillCredentialForCurrentTab(storage, tabs, request.credentialId);
     case "credentials.fillFirstForCurrentTab":
       return fillFirstCredentialForCurrentTab(storage, tabs);
     case "credentials.fillSenderOrigin":
-      return fillCredentialForSenderOrigin(storage, tabs, sender, request.credentialId);
+      return fillCredentialForSenderOrigin(
+        storage,
+        tabs,
+        sender,
+        request.credentialId,
+      );
     case "credentials.captureLoginAttempt":
       return captureLoginAttempt(storage, sender, request.credential);
     case "credentials.pendingForCurrentTab":
@@ -106,25 +116,32 @@ export interface ExtensionMessageSender {
   readonly tab?: ExtensionTab;
 }
 
-async function getConfigState(storage: ExtensionStorageArea): Promise<RuntimeResponse> {
+async function getConfigState(
+  storage: ExtensionStorageArea,
+): Promise<RuntimeResponse> {
   const config = await getConfig(storage);
 
   return {
     type: "config.state",
     config,
-    validation: validateConfig(config)
+    validation: validateConfig(config),
   };
 }
 
-async function validateToken(storage: ExtensionStorageArea): Promise<RuntimeResponse> {
+async function validateToken(
+  storage: ExtensionStorageArea,
+): Promise<RuntimeResponse> {
   const config = await getConfig(storage);
   const secrets = await getSecrets(storage);
 
-  if (secrets.vaultToken === undefined || secrets.vaultToken.trim().length === 0) {
+  if (
+    secrets.vaultToken === undefined ||
+    secrets.vaultToken.trim().length === 0
+  ) {
     return {
       type: "auth.validationResult",
       ok: false,
-      error: "Vault token is not configured"
+      error: "Vault token is not configured",
     };
   }
 
@@ -133,32 +150,35 @@ async function validateToken(storage: ExtensionStorageArea): Promise<RuntimeResp
       vaultUrl: config.vaultUrl,
       token: secrets.vaultToken,
       mount: config.kvMount,
-      namespace: config.vaultNamespace
+      namespace: config.vaultNamespace,
     });
 
     return {
       type: "auth.validationResult",
       ok: true,
-      token: await client.lookupSelf()
+      token: await client.lookupSelf(),
     };
   } catch (error) {
     return {
       type: "auth.validationResult",
       ok: false,
-      error: error instanceof Error ? error.message : "Vault token validation failed"
+      error:
+        error instanceof Error
+          ? error.message
+          : "Vault token validation failed",
     };
   }
 }
 
 async function loginOidc(
   storage: ExtensionStorageArea,
-  oidcTabFlow?: ExtensionOidcTabFlowApi
+  oidcTabFlow?: ExtensionOidcTabFlowApi,
 ): Promise<RuntimeResponse> {
   if (oidcTabFlow === undefined) {
     return {
       type: "auth.oidcLoginResult",
       ok: false,
-      error: "OIDC browser tab flow is not available"
+      error: "OIDC browser tab flow is not available",
     };
   }
 
@@ -169,7 +189,7 @@ async function loginOidc(
     return {
       type: "auth.oidcLoginResult",
       ok: false,
-      error: "OIDC role is required"
+      error: "OIDC role is required",
     };
   }
 
@@ -177,15 +197,15 @@ async function loginOidc(
     const client = new VaultOidcClient({
       vaultUrl: config.vaultUrl,
       authMount: config.oidcAuthMount,
-      namespace: config.vaultNamespace
+      namespace: config.vaultNamespace,
     });
     const authUrl = await client.createAuthUrl({
       role: config.oidcRole,
-      redirectUri
+      redirectUri,
     });
     const callbackUrl = await oidcTabFlow.openAuthUrlAndWaitForCallback(
       authUrl.authUrl,
-      redirectUri
+      redirectUri,
     );
     const callbackParams = new URL(callbackUrl).searchParams;
     const code = callbackParams.get("code");
@@ -196,7 +216,7 @@ async function loginOidc(
         type: "auth.oidcLoginResult",
         ok: false,
         error: "OIDC callback did not include code and state",
-        redirectUri
+        redirectUri,
       };
     }
 
@@ -204,13 +224,13 @@ async function loginOidc(
       code,
       state,
       nonce: authUrl.nonce,
-      clientNonce: authUrl.clientNonce
+      clientNonce: authUrl.clientNonce,
     });
 
     await saveVaultToken(storage, {
       token: result.clientToken,
       leaseDuration: result.leaseDuration,
-      renewable: result.renewable
+      renewable: result.renewable,
     });
 
     const updatedConfig = await getConfig(storage);
@@ -220,21 +240,21 @@ async function loginOidc(
       ok: true,
       tokenExpiresAt: updatedConfig.tokenExpiresAt,
       renewable: updatedConfig.tokenRenewable,
-      redirectUri
+      redirectUri,
     };
   } catch (error) {
     return {
       type: "auth.oidcLoginResult",
       ok: false,
       error: error instanceof Error ? error.message : "OIDC login failed",
-      redirectUri
+      redirectUri,
     };
   }
 }
 
 async function listCredentialsForCurrentTab(
   storage: ExtensionStorageArea,
-  tabs: ExtensionTabsApi
+  tabs: ExtensionTabsApi,
 ): Promise<RuntimeResponse> {
   const currentTab = await getCurrentTab(tabs);
   const origin = getTabOrigin(currentTab);
@@ -244,7 +264,7 @@ async function listCredentialsForCurrentTab(
       type: "credentials.list",
       origin,
       credentials: [],
-      error: "Current tab does not have a fillable URL"
+      error: "Current tab does not have a fillable URL",
     };
   }
 
@@ -253,13 +273,13 @@ async function listCredentialsForCurrentTab(
   return {
     type: "credentials.list",
     origin,
-    credentials: await repository.listForOrigin(origin)
+    credentials: await repository.listForOrigin(origin),
   };
 }
 
 async function listCredentialsForSenderOrigin(
   storage: ExtensionStorageArea,
-  sender: ExtensionMessageSender
+  sender: ExtensionMessageSender,
 ): Promise<RuntimeResponse> {
   const origin = getSenderOrigin(sender);
 
@@ -268,7 +288,7 @@ async function listCredentialsForSenderOrigin(
       type: "credentials.list",
       origin,
       credentials: [],
-      error: "Sender page does not have a fillable URL"
+      error: "Sender page does not have a fillable URL",
     };
   }
 
@@ -277,7 +297,7 @@ async function listCredentialsForSenderOrigin(
   return {
     type: "credentials.list",
     origin,
-    credentials: await repository.listForOrigin(origin)
+    credentials: await repository.listForOrigin(origin),
   };
 }
 
@@ -285,7 +305,7 @@ async function saveCredentialForCurrentTab(
   storage: ExtensionStorageArea,
   tabs: ExtensionTabsApi,
   username: string,
-  password: string
+  password: string,
 ): Promise<RuntimeResponse> {
   const currentTab = await getCurrentTab(tabs);
   const origin = getTabOrigin(currentTab);
@@ -294,7 +314,7 @@ async function saveCredentialForCurrentTab(
     return {
       type: "credentials.saveResult",
       ok: false,
-      error: "Current tab does not have a fillable URL"
+      error: "Current tab does not have a fillable URL",
     };
   }
 
@@ -302,7 +322,7 @@ async function saveCredentialForCurrentTab(
     return {
       type: "credentials.saveResult",
       ok: false,
-      error: "Username and password are required"
+      error: "Username and password are required",
     };
   }
 
@@ -313,19 +333,19 @@ async function saveCredentialForCurrentTab(
       username: username.trim(),
       password,
       url: currentTab.url,
-      title: currentTab.title ?? ""
+      title: currentTab.title ?? "",
     });
 
     return {
       type: "credentials.saveResult",
       ok: true,
-      credential
+      credential,
     };
   } catch (error) {
     return {
       type: "credentials.saveResult",
       ok: false,
-      error: error instanceof Error ? error.message : "Credential save failed"
+      error: error instanceof Error ? error.message : "Credential save failed",
     };
   }
 }
@@ -333,7 +353,7 @@ async function saveCredentialForCurrentTab(
 async function fillCredentialForCurrentTab(
   storage: ExtensionStorageArea,
   tabs: ExtensionTabsApi,
-  credentialId: string
+  credentialId: string,
 ): Promise<RuntimeResponse> {
   const currentTab = await getCurrentTab(tabs);
   const origin = getTabOrigin(currentTab);
@@ -342,7 +362,7 @@ async function fillCredentialForCurrentTab(
     return {
       type: "credentials.fillResult",
       ok: false,
-      error: "Current tab does not have a fillable URL"
+      error: "Current tab does not have a fillable URL",
     };
   }
 
@@ -353,7 +373,7 @@ async function fillCredentialForCurrentTab(
     return {
       type: "credentials.fillResult",
       ok: false,
-      error: "Credential was not found for this origin"
+      error: "Credential was not found for this origin",
     };
   }
 
@@ -362,26 +382,26 @@ async function fillCredentialForCurrentTab(
       type: "content.fillCredential",
       credential: {
         username: credential.username,
-        password: credential.password
-      }
+        password: credential.password,
+      },
     });
 
     return {
       type: "credentials.fillResult",
-      ok: true
+      ok: true,
     };
   } catch (error) {
     return {
       type: "credentials.fillResult",
       ok: false,
-      error: error instanceof Error ? error.message : "Credential fill failed"
+      error: error instanceof Error ? error.message : "Credential fill failed",
     };
   }
 }
 
 async function fillFirstCredentialForCurrentTab(
   storage: ExtensionStorageArea,
-  tabs: ExtensionTabsApi
+  tabs: ExtensionTabsApi,
 ): Promise<RuntimeResponse> {
   const currentTab = await getCurrentTab(tabs);
   const origin = getTabOrigin(currentTab);
@@ -390,7 +410,7 @@ async function fillFirstCredentialForCurrentTab(
     return {
       type: "credentials.fillResult",
       ok: false,
-      error: "Current tab does not have a fillable URL"
+      error: "Current tab does not have a fillable URL",
     };
   }
 
@@ -401,7 +421,7 @@ async function fillFirstCredentialForCurrentTab(
     return {
       type: "credentials.fillResult",
       ok: false,
-      error: "No credentials found for this origin"
+      error: "No credentials found for this origin",
     };
   }
 
@@ -414,7 +434,7 @@ async function fillCredentialForSenderOrigin(
   storage: ExtensionStorageArea,
   tabs: ExtensionTabsApi,
   sender: ExtensionMessageSender,
-  credentialId: string
+  credentialId: string,
 ): Promise<RuntimeResponse> {
   const origin = getSenderOrigin(sender);
   const tabId = sender.tab?.id;
@@ -423,7 +443,7 @@ async function fillCredentialForSenderOrigin(
     return {
       type: "credentials.fillResult",
       ok: false,
-      error: "Sender page does not have a fillable URL"
+      error: "Sender page does not have a fillable URL",
     };
   }
 
@@ -434,7 +454,7 @@ async function fillCredentialForSenderOrigin(
     return {
       type: "credentials.fillResult",
       ok: false,
-      error: "Credential was not found for this origin"
+      error: "Credential was not found for this origin",
     };
   }
 
@@ -443,19 +463,19 @@ async function fillCredentialForSenderOrigin(
       type: "content.fillCredential",
       credential: {
         username: credential.username,
-        password: credential.password
-      }
+        password: credential.password,
+      },
     });
 
     return {
       type: "credentials.fillResult",
-      ok: true
+      ok: true,
     };
   } catch (error) {
     return {
       type: "credentials.fillResult",
       ok: false,
-      error: error instanceof Error ? error.message : "Credential fill failed"
+      error: error instanceof Error ? error.message : "Credential fill failed",
     };
   }
 }
@@ -463,7 +483,7 @@ async function fillCredentialForSenderOrigin(
 async function captureLoginAttempt(
   storage: ExtensionStorageArea,
   sender: ExtensionMessageSender,
-  credential: CapturedCredentialInput
+  credential: CapturedCredentialInput,
 ): Promise<RuntimeResponse> {
   const origin = getTabOrigin(sender.tab ?? {});
 
@@ -471,15 +491,18 @@ async function captureLoginAttempt(
     return {
       type: "credentials.captureResult",
       ok: false,
-      error: "Submitted credential did not come from a fillable page"
+      error: "Submitted credential did not come from a fillable page",
     };
   }
 
-  if (credential.username.trim().length === 0 || credential.password.length === 0) {
+  if (
+    credential.username.trim().length === 0 ||
+    credential.password.length === 0
+  ) {
     return {
       type: "credentials.captureResult",
       ok: false,
-      error: "Username and password are required"
+      error: "Username and password are required",
     };
   }
 
@@ -488,7 +511,7 @@ async function captureLoginAttempt(
 
     return {
       type: "credentials.captureResult",
-      ok: false
+      ok: false,
     };
   }
 
@@ -498,7 +521,7 @@ async function captureLoginAttempt(
     url: credential.url,
     title: credential.title,
     username: credential.username.trim(),
-    password: credential.password
+    password: credential.password,
   };
 
   if (await repository.hasExactCredential(normalizedCredential)) {
@@ -506,67 +529,72 @@ async function captureLoginAttempt(
 
     return {
       type: "credentials.captureResult",
-      ok: false
+      ok: false,
     };
   }
 
   await savePendingCredential(storage, {
     ...normalizedCredential,
-    capturedAt: nowIsoString()
+    capturedAt: nowIsoString(),
   });
 
   return {
     type: "credentials.captureResult",
-    ok: true
+    ok: true,
   };
 }
 
-async function getIgnoredOrigins(storage: ExtensionStorageArea): Promise<RuntimeResponse> {
+async function getIgnoredOrigins(
+  storage: ExtensionStorageArea,
+): Promise<RuntimeResponse> {
   return {
     type: "settings.ignoredOrigins",
-    origins: await listIgnoredOrigins(storage)
+    origins: await listIgnoredOrigins(storage),
   };
 }
 
 async function addIgnoredOriginSetting(
   storage: ExtensionStorageArea,
-  origin: string
+  origin: string,
 ): Promise<RuntimeResponse> {
   try {
     return {
       type: "settings.ignoredOrigins",
-      origins: await addIgnoredOrigin(storage, origin)
+      origins: await addIgnoredOrigin(storage, origin),
     };
   } catch (error) {
     return {
       type: "settings.ignoredOrigins",
       origins: await listIgnoredOrigins(storage),
-      error: error instanceof Error ? error.message : "Unable to ignore origin"
+      error: error instanceof Error ? error.message : "Unable to ignore origin",
     };
   }
 }
 
 async function removeIgnoredOriginSetting(
   storage: ExtensionStorageArea,
-  origin: string
+  origin: string,
 ): Promise<RuntimeResponse> {
   try {
     return {
       type: "settings.ignoredOrigins",
-      origins: await removeIgnoredOrigin(storage, origin)
+      origins: await removeIgnoredOrigin(storage, origin),
     };
   } catch (error) {
     return {
       type: "settings.ignoredOrigins",
       origins: await listIgnoredOrigins(storage),
-      error: error instanceof Error ? error.message : "Unable to remove ignored origin"
+      error:
+        error instanceof Error
+          ? error.message
+          : "Unable to remove ignored origin",
     };
   }
 }
 
 async function pendingCredentialForCurrentTab(
   storage: ExtensionStorageArea,
-  tabs: ExtensionTabsApi
+  tabs: ExtensionTabsApi,
 ): Promise<RuntimeResponse> {
   const currentTab = await getCurrentTab(tabs);
   const origin = getTabOrigin(currentTab);
@@ -574,38 +602,38 @@ async function pendingCredentialForCurrentTab(
   if (origin === null) {
     return {
       type: "credentials.pending",
-      credential: null
+      credential: null,
     };
   }
 
   return {
     type: "credentials.pending",
-    credential: await getPendingCredential(storage, origin)
+    credential: await getPendingCredential(storage, origin),
   };
 }
 
 async function pendingCredentialForSenderOrigin(
   storage: ExtensionStorageArea,
-  sender: ExtensionMessageSender
+  sender: ExtensionMessageSender,
 ): Promise<RuntimeResponse> {
   const origin = getSenderOrigin(sender);
 
   if (origin === null) {
     return {
       type: "credentials.pending",
-      credential: null
+      credential: null,
     };
   }
 
   return {
     type: "credentials.pending",
-    credential: await getPendingCredential(storage, origin)
+    credential: await getPendingCredential(storage, origin),
   };
 }
 
 async function savePendingCredentialForCurrentTab(
   storage: ExtensionStorageArea,
-  tabs: ExtensionTabsApi
+  tabs: ExtensionTabsApi,
 ): Promise<RuntimeResponse> {
   const currentTab = await getCurrentTab(tabs);
   const origin = getTabOrigin(currentTab);
@@ -614,7 +642,7 @@ async function savePendingCredentialForCurrentTab(
     return {
       type: "credentials.saveResult",
       ok: false,
-      error: "Current tab does not have a fillable URL"
+      error: "Current tab does not have a fillable URL",
     };
   }
 
@@ -624,7 +652,7 @@ async function savePendingCredentialForCurrentTab(
     return {
       type: "credentials.saveResult",
       ok: false,
-      error: "No captured credential for this origin"
+      error: "No captured credential for this origin",
     };
   }
 
@@ -634,7 +662,7 @@ async function savePendingCredentialForCurrentTab(
     username: pendingCredential.username,
     password: pendingCredential.password,
     url: pendingCredential.url,
-    title: pendingCredential.title
+    title: pendingCredential.title,
   });
 
   await deletePendingCredential(storage, origin);
@@ -642,13 +670,13 @@ async function savePendingCredentialForCurrentTab(
   return {
     type: "credentials.saveResult",
     ok: true,
-    credential
+    credential,
   };
 }
 
 async function savePendingCredentialForSenderOrigin(
   storage: ExtensionStorageArea,
-  sender: ExtensionMessageSender
+  sender: ExtensionMessageSender,
 ): Promise<RuntimeResponse> {
   const origin = getSenderOrigin(sender);
 
@@ -656,7 +684,7 @@ async function savePendingCredentialForSenderOrigin(
     return {
       type: "credentials.saveResult",
       ok: false,
-      error: "Sender page does not have a fillable URL"
+      error: "Sender page does not have a fillable URL",
     };
   }
 
@@ -666,7 +694,7 @@ async function savePendingCredentialForSenderOrigin(
     return {
       type: "credentials.saveResult",
       ok: false,
-      error: "No captured credential for this origin"
+      error: "No captured credential for this origin",
     };
   }
 
@@ -676,7 +704,7 @@ async function savePendingCredentialForSenderOrigin(
     username: pendingCredential.username,
     password: pendingCredential.password,
     url: pendingCredential.url,
-    title: pendingCredential.title
+    title: pendingCredential.title,
   });
 
   await deletePendingCredential(storage, origin);
@@ -684,13 +712,13 @@ async function savePendingCredentialForSenderOrigin(
   return {
     type: "credentials.saveResult",
     ok: true,
-    credential
+    credential,
   };
 }
 
 async function dismissPendingCredentialForCurrentTab(
   storage: ExtensionStorageArea,
-  tabs: ExtensionTabsApi
+  tabs: ExtensionTabsApi,
 ): Promise<RuntimeResponse> {
   const currentTab = await getCurrentTab(tabs);
   const origin = getTabOrigin(currentTab);
@@ -701,13 +729,13 @@ async function dismissPendingCredentialForCurrentTab(
 
   return {
     type: "credentials.pending",
-    credential: null
+    credential: null,
   };
 }
 
 async function dismissPendingCredentialForSenderOrigin(
   storage: ExtensionStorageArea,
-  sender: ExtensionMessageSender
+  sender: ExtensionMessageSender,
 ): Promise<RuntimeResponse> {
   const origin = getSenderOrigin(sender);
 
@@ -717,13 +745,13 @@ async function dismissPendingCredentialForSenderOrigin(
 
   return {
     type: "credentials.pending",
-    credential: null
+    credential: null,
   };
 }
 
 async function ignoreSenderOrigin(
   storage: ExtensionStorageArea,
-  sender: ExtensionMessageSender
+  sender: ExtensionMessageSender,
 ): Promise<RuntimeResponse> {
   const origin = getSenderOrigin(sender);
 
@@ -733,17 +761,20 @@ async function ignoreSenderOrigin(
 
   return {
     type: "credentials.pending",
-    credential: null
+    credential: null,
   };
 }
 
 async function createCredentialRepository(
-  storage: ExtensionStorageArea
+  storage: ExtensionStorageArea,
 ): Promise<CredentialRepository> {
   const config = await getConfig(storage);
   const secrets = await getSecrets(storage);
 
-  if (secrets.vaultToken === undefined || secrets.vaultToken.trim().length === 0) {
+  if (
+    secrets.vaultToken === undefined ||
+    secrets.vaultToken.trim().length === 0
+  ) {
     throw new Error("Vault token is not configured");
   }
 
@@ -752,9 +783,9 @@ async function createCredentialRepository(
       vaultUrl: config.vaultUrl,
       token: secrets.vaultToken,
       mount: config.kvMount,
-      namespace: config.vaultNamespace
+      namespace: config.vaultNamespace,
     }),
-    config.basePath
+    config.basePath,
   );
 }
 
@@ -777,7 +808,9 @@ function getTabOrigin(tab: ExtensionTab): string | null {
   try {
     const origin = normalizeOrigin(tab.url);
 
-    return origin.startsWith("http://") || origin.startsWith("https://") ? origin : null;
+    return origin.startsWith("http://") || origin.startsWith("https://")
+      ? origin
+      : null;
   } catch {
     return null;
   }

@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { configStorageKey, defaultConfig, secretsStorageKey } from "../src/shared/config";
+import {
+  configStorageKey,
+  defaultConfig,
+  secretsStorageKey,
+} from "../src/shared/config";
 import {
   addIgnoredOrigin,
   getConfig,
@@ -10,7 +14,7 @@ import {
   removeIgnoredOrigin,
   saveVaultToken,
   saveConfig,
-  type ExtensionStorageArea
+  type ExtensionStorageArea,
 } from "../src/background/storage";
 
 describe("background config storage", () => {
@@ -29,46 +33,46 @@ describe("background config storage", () => {
       config: {
         vaultUrl: "http://vault.example:8200/",
         kvMount: "/secret/",
-        basePath: "/firefox-vault/",
+        basePath: "/hvsecrets/",
         authMode: "token",
         oidcAuthMount: "oidc",
-        oidcRole: "firefox-vault",
-        vaultNamespace: "admin"
+        oidcRole: "hvsecrets",
+        vaultNamespace: "admin",
       },
-      vaultToken: " dev-token "
+      vaultToken: " dev-token ",
     });
 
     expect(config).toEqual(
       expect.objectContaining({
         vaultUrl: "http://vault.example:8200",
         kvMount: "secret",
-        basePath: "firefox-vault",
-        hasToken: true
-      })
+        basePath: "hvsecrets",
+        hasToken: true,
+      }),
     );
     await expect(getSecrets(storage)).resolves.toEqual({
       vaultToken: "dev-token",
       tokenExpiresAt: null,
-      tokenRenewable: false
+      tokenRenewable: false,
     });
-    expect((await storage.get(configStorageKey))[configStorageKey]).not.toHaveProperty(
-      "vaultToken"
-    );
+    expect(
+      (await storage.get(configStorageKey))[configStorageKey],
+    ).not.toHaveProperty("vaultToken");
   });
 
   it("can clear a previously saved token", async () => {
     const storage = createMemoryStorage({
-      [secretsStorageKey]: { vaultToken: "dev-token" }
+      [secretsStorageKey]: { vaultToken: "dev-token" },
     });
 
     const config = await saveConfig(storage, {
       config: {
         vaultUrl: "http://vault.example:8200",
         kvMount: "secret",
-        basePath: "firefox-vault",
-        authMode: "token"
+        basePath: "hvsecrets",
+        authMode: "token",
       },
-      clearToken: true
+      clearToken: true,
     });
 
     expect(config.hasToken).toBe(false);
@@ -81,7 +85,7 @@ describe("background config storage", () => {
     await saveVaultToken(storage, {
       token: "oidc-token",
       leaseDuration: 3600,
-      renewable: true
+      renewable: true,
     });
 
     const config = await getConfig(storage);
@@ -90,7 +94,10 @@ describe("background config storage", () => {
     expect(config.tokenExpiresAt).toEqual(expect.any(String));
     expect(config.tokenRenewable).toBe(true);
     await expect(getSecrets(storage)).resolves.toEqual(
-      expect.objectContaining({ vaultToken: "oidc-token", tokenRenewable: true })
+      expect.objectContaining({
+        vaultToken: "oidc-token",
+        tokenRenewable: true,
+      }),
     );
   });
 
@@ -99,24 +106,24 @@ describe("background config storage", () => {
       [secretsStorageKey]: {
         vaultToken: "old-token",
         tokenExpiresAt: "2026-01-01T00:00:00.000Z",
-        tokenRenewable: true
-      }
+        tokenRenewable: true,
+      },
     });
 
     await saveConfig(storage, {
       config: {
         vaultUrl: "http://vault.example:8200",
         kvMount: "secret",
-        basePath: "firefox-vault",
-        authMode: "token"
+        basePath: "hvsecrets",
+        authMode: "token",
       },
-      vaultToken: "new-token"
+      vaultToken: "new-token",
     });
 
     await expect(getSecrets(storage)).resolves.toEqual({
       vaultToken: "new-token",
       tokenExpiresAt: null,
-      tokenRenewable: false
+      tokenRenewable: false,
     });
   });
 
@@ -128,27 +135,36 @@ describe("background config storage", () => {
 
     await expect(listIgnoredOrigins(storage)).resolves.toEqual([
       "http://example.com",
-      "https://example.com"
+      "https://example.com",
     ]);
-    await expect(isIgnoredOrigin(storage, "https://example.com/other")).resolves.toBe(true);
-    await expect(isIgnoredOrigin(storage, "https://app.example.com")).resolves.toBe(false);
-    expect((await storage.get(ignoredOriginsStorageKey))[ignoredOriginsStorageKey]).toEqual([
-      "http://example.com",
-      "https://example.com"
-    ]);
+    await expect(
+      isIgnoredOrigin(storage, "https://example.com/other"),
+    ).resolves.toBe(true);
+    await expect(
+      isIgnoredOrigin(storage, "https://app.example.com"),
+    ).resolves.toBe(false);
+    expect(
+      (await storage.get(ignoredOriginsStorageKey))[ignoredOriginsStorageKey],
+    ).toEqual(["http://example.com", "https://example.com"]);
   });
 
   it("removes ignored origins", async () => {
     const storage = createMemoryStorage({
-      [ignoredOriginsStorageKey]: ["https://example.com"]
+      [ignoredOriginsStorageKey]: ["https://example.com"],
     });
 
-    await expect(removeIgnoredOrigin(storage, "https://example.com/path")).resolves.toEqual([]);
-    await expect(isIgnoredOrigin(storage, "https://example.com")).resolves.toBe(false);
+    await expect(
+      removeIgnoredOrigin(storage, "https://example.com/path"),
+    ).resolves.toEqual([]);
+    await expect(isIgnoredOrigin(storage, "https://example.com")).resolves.toBe(
+      false,
+    );
   });
 });
 
-function createMemoryStorage(initial: Record<string, unknown> = {}): ExtensionStorageArea {
+function createMemoryStorage(
+  initial: Record<string, unknown> = {},
+): ExtensionStorageArea {
   const values = { ...initial };
 
   return {
@@ -158,14 +174,19 @@ function createMemoryStorage(initial: Record<string, unknown> = {}): ExtensionSt
       }
 
       if (Array.isArray(keys)) {
-        return Promise.resolve(Object.fromEntries(keys.map((key) => [key, values[key]])));
+        return Promise.resolve(
+          Object.fromEntries(keys.map((key) => [key, values[key]])),
+        );
       }
 
       if (keys !== null && typeof keys === "object") {
         return Promise.resolve(
           Object.fromEntries(
-            Object.entries(keys).map(([key, defaultValue]) => [key, values[key] ?? defaultValue])
-          )
+            Object.entries(keys).map(([key, defaultValue]) => [
+              key,
+              values[key] ?? defaultValue,
+            ]),
+          ),
         );
       }
 
@@ -174,6 +195,6 @@ function createMemoryStorage(initial: Record<string, unknown> = {}): ExtensionSt
     set(items: Record<string, unknown>) {
       Object.assign(values, items);
       return Promise.resolve();
-    }
+    },
   };
 }

@@ -73,7 +73,7 @@ export class VaultKvV2Client {
   async lookupSelf(): Promise<VaultTokenLookupSelfResult> {
     const response = await this.request<VaultTokenLookupSelfResult>(
       "GET",
-      "/v1/auth/token/lookup-self"
+      "/v1/auth/token/lookup-self",
     );
 
     if (response.data === undefined) {
@@ -84,11 +84,11 @@ export class VaultKvV2Client {
   }
 
   async read<TData extends Record<string, unknown>>(
-    path: string
+    path: string,
   ): Promise<VaultKvReadResult<TData>> {
     const response = await this.request<VaultKvReadEnvelope<TData>>(
       "GET",
-      this.kvDataApiPath(path)
+      this.kvDataApiPath(path),
     );
 
     if (response.data === undefined) {
@@ -97,19 +97,23 @@ export class VaultKvV2Client {
 
     return {
       data: response.data.data,
-      metadata: response.data.metadata
+      metadata: response.data.metadata,
     };
   }
 
   async write(
     path: string,
     data: Record<string, unknown>,
-    options: { readonly cas?: number } = {}
+    options: { readonly cas?: number } = {},
   ): Promise<VaultKvMetadata> {
-    const response = await this.request<VaultKvWriteEnvelope>("POST", this.kvDataApiPath(path), {
-      data,
-      options: options.cas === undefined ? undefined : { cas: options.cas }
-    });
+    const response = await this.request<VaultKvWriteEnvelope>(
+      "POST",
+      this.kvDataApiPath(path),
+      {
+        data,
+        options: options.cas === undefined ? undefined : { cas: options.cas },
+      },
+    );
 
     if (response.data === undefined) {
       throw new Error("Vault KV write response did not include data");
@@ -119,7 +123,10 @@ export class VaultKvV2Client {
   }
 
   async list(path: string): Promise<readonly string[]> {
-    const response = await this.request<VaultKvListEnvelope>("LIST", this.kvMetadataApiPath(path));
+    const response = await this.request<VaultKvListEnvelope>(
+      "LIST",
+      this.kvMetadataApiPath(path),
+    );
 
     if (response.data === undefined) {
       throw new Error("Vault KV list response did not include data");
@@ -151,10 +158,10 @@ export class VaultKvV2Client {
   private async request<TData = never>(
     method: string,
     apiPath: string,
-    body?: unknown
+    body?: unknown,
   ): Promise<VaultEnvelope<TData>> {
     const headers = new Headers({
-      "X-Vault-Token": this.token
+      "X-Vault-Token": this.token,
     });
 
     if (this.namespace !== undefined && this.namespace.length > 0) {
@@ -164,7 +171,7 @@ export class VaultKvV2Client {
     const response = await this.fetchImpl(`${this.vaultUrl}${apiPath}`, {
       method,
       headers,
-      body: body === undefined ? undefined : JSON.stringify(body)
+      body: body === undefined ? undefined : JSON.stringify(body),
     });
     const envelope = await parseVaultEnvelope<TData>(response);
 
@@ -172,7 +179,7 @@ export class VaultKvV2Client {
       throw new VaultClientError(
         `Vault request failed with status ${String(response.status)}`,
         response.status,
-        envelope.errors ?? []
+        envelope.errors ?? [],
       );
     }
 
@@ -180,7 +187,9 @@ export class VaultKvV2Client {
   }
 }
 
-async function parseVaultEnvelope<TData>(response: Response): Promise<VaultEnvelope<TData>> {
+async function parseVaultEnvelope<TData>(
+  response: Response,
+): Promise<VaultEnvelope<TData>> {
   if (response.status === 204) {
     return {};
   }

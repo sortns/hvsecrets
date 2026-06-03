@@ -1,6 +1,6 @@
-# Firefox Vault
+# HVSecrets
 
-Firefox Vault is a development-stage Firefox WebExtension that provides a password-manager workflow backed by HashiCorp Vault KV v2.
+HVSecrets is a development-stage browser extension that provides a password-manager workflow backed by HashiCorp Vault KV v2.
 
 Instead, it uses content scripts, a background script, popup/options pages, and Vault API calls to detect login forms, offer fills, and save/update credentials in Vault.
 
@@ -95,11 +95,11 @@ More detail: [docs/amo-publishing.md](docs/amo-publishing.md)
 Example policy:
 
 ```hcl
-path "firefox/data/firefox-vault/*" {
+path "firefox/data/hvsecrets/*" {
   capabilities = ["create", "read", "update", "delete"]
 }
 
-path "firefox/metadata/firefox-vault/*" {
+path "firefox/metadata/hvsecrets/*" {
   capabilities = ["list", "read", "delete"]
 }
 ```
@@ -109,7 +109,7 @@ For a local/dev Vault where the current `VAULT_TOKEN` can manage mounts and poli
 ```sh
 export VAULT_ADDR='http://127.0.0.1:8200'
 export VAULT_TOKEN='...'
-VAULT_KV_MOUNT='firefox' VAULT_BASE_PATH='firefox-vault' ./scripts/setup-demo-vault.sh
+VAULT_KV_MOUNT='firefox' VAULT_BASE_PATH='hvsecrets' ./scripts/setup-demo-vault.sh
 ```
 
 The extension Options page needs:

@@ -3,8 +3,8 @@ set -euo pipefail
 
 VAULT_ADDR="${VAULT_ADDR:-http://127.0.0.1:8200}"
 VAULT_KV_MOUNT="${VAULT_KV_MOUNT:-firefox}"
-VAULT_BASE_PATH="${VAULT_BASE_PATH:-firefox-vault}"
-VAULT_POLICY_NAME="${VAULT_POLICY_NAME:-firefox-vault-dev}"
+VAULT_BASE_PATH="${VAULT_BASE_PATH:-hvsecrets}"
+VAULT_POLICY_NAME="${VAULT_POLICY_NAME:-hvsecrets-dev}"
 
 if ! command -v vault >/dev/null 2>&1; then
   echo "vault CLI is required" >&2

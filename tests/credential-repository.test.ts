@@ -1,28 +1,31 @@
 import { describe, expect, it } from "vitest";
-import { CredentialRepository, type CredentialKvClient } from "../src/vault/credential-repository";
+import {
+  CredentialRepository,
+  type CredentialKvClient,
+} from "../src/vault/credential-repository";
 
 describe("CredentialRepository", () => {
   it("saves credentials under per-origin KV v2 paths", async () => {
     const client = createFakeClient();
-    const repository = new CredentialRepository(client, "firefox-vault");
+    const repository = new CredentialRepository(client, "hvsecrets");
     const saved = await repository.save({
       origin: "https://example.com/login",
       username: "alice",
       password: "secret",
       url: "https://example.com/login",
-      title: "Example"
+      title: "Example",
     });
 
     expect(saved.username).toBe("alice");
     expect(client.writes[0]?.path).toMatch(
-      /^firefox-vault\/credentials\/https\.example\.com\/[0-9a-f-]+$/
+      /^hvsecrets\/credentials\/https\.example\.com\/[0-9a-f-]+$/,
     );
     expect(client.writes[0]?.options).toEqual({ cas: 0 });
   });
 
   it("lists credential summaries without passwords", async () => {
     const client = createFakeClient({
-      "firefox-vault/credentials/https.example.com/id-1": {
+      "hvsecrets/credentials/https.example.com/id-1": {
         schema: 1,
         origin: "https://example.com",
         realm: null,
@@ -33,26 +36,28 @@ describe("CredentialRepository", () => {
         created_at: "2026-05-26T00:00:00.000Z",
         updated_at: "2026-05-26T00:00:00.000Z",
         tags: [],
-        notes: ""
-      }
+        notes: "",
+      },
     });
-    const repository = new CredentialRepository(client, "firefox-vault");
+    const repository = new CredentialRepository(client, "hvsecrets");
 
-    await expect(repository.listForOrigin("https://example.com/login")).resolves.toEqual([
+    await expect(
+      repository.listForOrigin("https://example.com/login"),
+    ).resolves.toEqual([
       {
         id: "id-1",
         origin: "https://example.com",
         username: "alice",
         url: "https://example.com/login",
         title: "Example",
-        updated_at: "2026-05-26T00:00:00.000Z"
-      }
+        updated_at: "2026-05-26T00:00:00.000Z",
+      },
     ]);
   });
 
   it("updates an existing username instead of creating a duplicate secret", async () => {
     const client = createFakeClient({
-      "firefox-vault/credentials/https.example.com/id-1": {
+      "hvsecrets/credentials/https.example.com/id-1": {
         schema: 1,
         origin: "https://example.com",
         realm: null,
@@ -63,35 +68,37 @@ describe("CredentialRepository", () => {
         created_at: "2026-05-26T00:00:00.000Z",
         updated_at: "2026-05-26T00:00:00.000Z",
         tags: [],
-        notes: ""
-      }
+        notes: "",
+      },
     });
-    const repository = new CredentialRepository(client, "firefox-vault");
+    const repository = new CredentialRepository(client, "hvsecrets");
 
     const saved = await repository.saveOrUpdate({
       origin: "https://example.com/login",
       username: "alice",
       password: "new-secret",
       url: "https://example.com/login",
-      title: "Example"
+      title: "Example",
     });
 
     expect(saved.id).toBe("id-1");
     expect(client.writes).toHaveLength(1);
-    expect(client.writes[0]?.path).toBe("firefox-vault/credentials/https.example.com/id-1");
+    expect(client.writes[0]?.path).toBe(
+      "hvsecrets/credentials/https.example.com/id-1",
+    );
     expect(client.writes[0]?.options).toEqual({ cas: 1 });
     expect(client.writes[0]?.data).toEqual(
       expect.objectContaining({
         username: "alice",
         password: "new-secret",
-        created_at: "2026-05-26T00:00:00.000Z"
-      })
+        created_at: "2026-05-26T00:00:00.000Z",
+      }),
     );
   });
 
   it("detects exact credentials for an origin and username", async () => {
     const client = createFakeClient({
-      "firefox-vault/credentials/https.example.com/id-1": {
+      "hvsecrets/credentials/https.example.com/id-1": {
         schema: 1,
         origin: "https://example.com",
         realm: null,
@@ -102,10 +109,10 @@ describe("CredentialRepository", () => {
         created_at: "2026-05-26T00:00:00.000Z",
         updated_at: "2026-05-26T00:00:00.000Z",
         tags: [],
-        notes: ""
-      }
+        notes: "",
+      },
     });
-    const repository = new CredentialRepository(client, "firefox-vault");
+    const repository = new CredentialRepository(client, "hvsecrets");
 
     await expect(
       repository.hasExactCredential({
@@ -113,8 +120,8 @@ describe("CredentialRepository", () => {
         username: "alice",
         password: "secret",
         url: "https://example.com/login",
-        title: "Example"
-      })
+        title: "Example",
+      }),
     ).resolves.toBe(true);
     await expect(
       repository.hasExactCredential({
@@ -122,8 +129,8 @@ describe("CredentialRepository", () => {
         username: "alice",
         password: "different",
         url: "https://example.com/login",
-        title: "Example"
-      })
+        title: "Example",
+      }),
     ).resolves.toBe(false);
   });
 });
@@ -137,12 +144,16 @@ interface FakeClient {
 }
 
 function createFakeClient(
-  records: Record<string, Record<string, unknown>> = {}
+  records: Record<string, Record<string, unknown>> = {},
 ): FakeClient & CredentialKvClient {
   const writes: FakeClient["writes"] = [];
   const fakeClient = {
     writes,
-    write(path: string, data: Record<string, unknown>, options?: { readonly cas?: number }) {
+    write(
+      path: string,
+      data: Record<string, unknown>,
+      options?: { readonly cas?: number },
+    ) {
       writes.push({ path, data, options });
       records[path] = data;
 
@@ -165,9 +176,9 @@ function createFakeClient(
 
       return Promise.resolve({
         data,
-        metadata: { version: 1 }
+        metadata: { version: 1 },
       });
-    }
+    },
   };
 
   return fakeClient;

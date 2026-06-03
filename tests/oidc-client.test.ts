@@ -11,51 +11,55 @@ describe("VaultOidcClient", () => {
     const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(
       jsonResponse({
         data: {
-          auth_url: "https://idp.example/authorize?code=ignored&nonce=vault-nonce&state=vault-state"
-        }
-      })
+          auth_url:
+            "https://idp.example/authorize?code=ignored&nonce=vault-nonce&state=vault-state",
+        },
+      }),
     );
     const client = new VaultOidcClient({
       vaultUrl: "http://vault.example",
       authMount: "oidc",
-      fetchImpl
+      fetchImpl,
     });
 
     const result = await client.createAuthUrl({
-      role: "firefox-vault",
-      redirectUri: "https://extension.example/callback"
+      role: "hvsecrets",
+      redirectUri: "https://extension.example/callback",
     });
 
     expect(result.authUrl).toContain("https://idp.example/authorize");
     expect(result.nonce).toBe("vault-nonce");
     expect(result.clientNonce).toEqual(expect.any(String));
-    expect(fetchImpl.mock.calls[0]?.[0]).toBe("http://vault.example/v1/auth/oidc/oidc/auth_url");
+    expect(fetchImpl.mock.calls[0]?.[0]).toBe(
+      "http://vault.example/v1/auth/oidc/oidc/auth_url",
+    );
     const init = fetchImpl.mock.calls[0]?.[1] as FetchRequestInit | undefined;
     expect(init?.method).toBe("POST");
-    expect(init?.body).toContain('"role":"firefox-vault"');
+    expect(init?.body).toContain('"role":"hvsecrets"');
   });
 
   it("resolves relative Vault OIDC auth URLs against the configured Vault URL", async () => {
     const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(
       jsonResponse({
         data: {
-          auth_url: "/ui/vault/auth/oidc/oidc/callback?nonce=vault-nonce&state=vault-state"
-        }
-      })
+          auth_url:
+            "/ui/vault/auth/oidc/oidc/callback?nonce=vault-nonce&state=vault-state",
+        },
+      }),
     );
     const client = new VaultOidcClient({
       vaultUrl: "https://vault.example",
       authMount: "oidc",
-      fetchImpl
+      fetchImpl,
     });
 
     const result = await client.createAuthUrl({
-      role: "firefox-vault",
-      redirectUri: "https://extension.example/callback"
+      role: "hvsecrets",
+      redirectUri: "https://extension.example/callback",
     });
 
     expect(result.authUrl).toBe(
-      "https://vault.example/ui/vault/auth/oidc/oidc/callback?nonce=vault-nonce&state=vault-state"
+      "https://vault.example/ui/vault/auth/oidc/oidc/callback?nonce=vault-nonce&state=vault-state",
     );
     expect(result.nonce).toBe("vault-nonce");
   });
@@ -65,23 +69,23 @@ describe("VaultOidcClient", () => {
       jsonResponse({
         data: {
           auth_url:
-            "https://idp.example/authorize?client_id=vault&amp;nonce=vault-nonce&amp;state=vault-state"
-        }
-      })
+            "https://idp.example/authorize?client_id=vault&amp;nonce=vault-nonce&amp;state=vault-state",
+        },
+      }),
     );
     const client = new VaultOidcClient({
       vaultUrl: "https://vault.example",
       authMount: "oidc",
-      fetchImpl
+      fetchImpl,
     });
 
     const result = await client.createAuthUrl({
-      role: "firefox-vault",
-      redirectUri: "https://extension.example/callback"
+      role: "hvsecrets",
+      redirectUri: "https://extension.example/callback",
     });
 
     expect(result.authUrl).toBe(
-      "https://idp.example/authorize?client_id=vault&nonce=vault-nonce&state=vault-state"
+      "https://idp.example/authorize?client_id=vault&nonce=vault-nonce&state=vault-state",
     );
     expect(result.nonce).toBe("vault-nonce");
   });
@@ -90,23 +94,24 @@ describe("VaultOidcClient", () => {
     const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(
       jsonResponse({
         data: {
-          auth_url: "https://vault.example/ui/vault/auth/oidc/oidc/callback?code=secret-code"
-        }
-      })
+          auth_url:
+            "https://vault.example/ui/vault/auth/oidc/oidc/callback?code=secret-code",
+        },
+      }),
     );
     const client = new VaultOidcClient({
       vaultUrl: "https://vault.example",
       authMount: "oidc",
-      fetchImpl
+      fetchImpl,
     });
 
     await expect(
       client.createAuthUrl({
-        role: "firefox-vault",
-        redirectUri: "https://extension.example/callback"
-      })
+        role: "hvsecrets",
+        redirectUri: "https://extension.example/callback",
+      }),
     ).rejects.toThrow(
-      "Vault OIDC auth_url response did not include nonce. Returned URL: https://vault.example/ui/vault/auth/oidc/oidc/callback?code=redacted"
+      "Vault OIDC auth_url response did not include nonce. Returned URL: https://vault.example/ui/vault/auth/oidc/oidc/callback?code=redacted",
     );
   });
 
@@ -116,14 +121,14 @@ describe("VaultOidcClient", () => {
         auth: {
           client_token: "vault-token",
           lease_duration: 3600,
-          renewable: true
-        }
-      })
+          renewable: true,
+        },
+      }),
     );
     const client = new VaultOidcClient({
       vaultUrl: "http://vault.example",
       authMount: "oidc",
-      fetchImpl
+      fetchImpl,
     });
 
     await expect(
@@ -131,14 +136,16 @@ describe("VaultOidcClient", () => {
         code: "code",
         state: "state",
         nonce: "nonce",
-        clientNonce: "client-nonce"
-      })
+        clientNonce: "client-nonce",
+      }),
     ).resolves.toEqual({
       clientToken: "vault-token",
       leaseDuration: 3600,
-      renewable: true
+      renewable: true,
     });
-    expect(fetchImpl.mock.calls[0]?.[0]).toContain("/v1/auth/oidc/oidc/callback?");
+    expect(fetchImpl.mock.calls[0]?.[0]).toContain(
+      "/v1/auth/oidc/oidc/callback?",
+    );
   });
 });
 
@@ -146,7 +153,7 @@ function jsonResponse(body: unknown, init: ResponseInit = {}): Response {
   return new Response(JSON.stringify(body), {
     status: init.status ?? 200,
     headers: {
-      "content-type": "application/json"
-    }
+      "content-type": "application/json",
+    },
   });
 }

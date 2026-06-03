@@ -1,8 +1,8 @@
 import { handleRuntimeRequest, type ExtensionOidcTabFlowApi } from "./handlers";
 import { isRuntimeRequest } from "../shared/messages";
 
-const vaultContextMenuRootId = "firefox-vault-use-saved-password";
-const vaultContextMenuCredentialPrefix = "firefox-vault-fill:";
+const vaultContextMenuRootId = "hvsecrets-use-saved-password";
+const vaultContextMenuCredentialPrefix = "hvsecrets-fill:";
 let vaultContextMenuChildIds: string[] = [];
 
 browser.runtime.onInstalled.addListener(() => {
@@ -23,10 +23,10 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
     browser.storage.local,
     {
       query: (queryInfo) => browser.tabs.query(queryInfo),
-      sendMessage: (tabId, request) => browser.tabs.sendMessage(tabId, request)
+      sendMessage: (tabId, request) => browser.tabs.sendMessage(tabId, request),
     },
     sender,
-    oidcTabFlow
+    oidcTabFlow,
   );
 });
 
@@ -39,20 +39,22 @@ browser.contextMenus.onClicked.addListener((info, tab) => {
     return;
   }
 
-  const credentialId = info.menuItemId.slice(vaultContextMenuCredentialPrefix.length);
+  const credentialId = info.menuItemId.slice(
+    vaultContextMenuCredentialPrefix.length,
+  );
 
   void handleRuntimeRequest(
     {
       type: "credentials.fillCurrentTab",
-      credentialId
+      credentialId,
     },
     browser.storage.local,
     {
       query: () => Promise.resolve([tab]),
-      sendMessage: (tabId, request) => browser.tabs.sendMessage(tabId, request)
+      sendMessage: (tabId, request) => browser.tabs.sendMessage(tabId, request),
     },
     { tab },
-    oidcTabFlow
+    oidcTabFlow,
   );
 });
 
@@ -64,12 +66,14 @@ async function installContextMenu(): Promise<void> {
   await browser.contextMenus.removeAll();
   browser.contextMenus.create({
     id: vaultContextMenuRootId,
-    title: "Firefox Vault: Use saved password",
-    contexts: ["editable"]
+    title: "HVSecrets: Use saved password",
+    contexts: ["editable"],
   });
 }
 
-async function refreshCredentialContextMenu(tab?: browser.tabs.Tab): Promise<void> {
+async function refreshCredentialContextMenu(
+  tab?: browser.tabs.Tab,
+): Promise<void> {
   await removeCredentialContextMenuItems();
 
   if (tab === undefined) {
@@ -82,19 +86,22 @@ async function refreshCredentialContextMenu(tab?: browser.tabs.Tab): Promise<voi
     browser.storage.local,
     {
       query: () => Promise.resolve([tab]),
-      sendMessage: (tabId, request) => browser.tabs.sendMessage(tabId, request)
+      sendMessage: (tabId, request) => browser.tabs.sendMessage(tabId, request),
     },
-    { tab }
+    { tab },
   );
 
-  if (response.type !== "credentials.list" || response.credentials.length === 0) {
+  if (
+    response.type !== "credentials.list" ||
+    response.credentials.length === 0
+  ) {
     const emptyId = `${vaultContextMenuCredentialPrefix}empty`;
     void browser.contextMenus.create({
       id: emptyId,
       parentId: vaultContextMenuRootId,
       title: "No saved logins for this site",
       contexts: ["editable"],
-      enabled: false
+      enabled: false,
     });
     vaultContextMenuChildIds = [emptyId];
     void browser.contextMenus.refresh();
@@ -106,8 +113,9 @@ async function refreshCredentialContextMenu(tab?: browser.tabs.Tab): Promise<voi
     void browser.contextMenus.create({
       id,
       parentId: vaultContextMenuRootId,
-      title: credential.username.length === 0 ? "No username" : credential.username,
-      contexts: ["editable"]
+      title:
+        credential.username.length === 0 ? "No username" : credential.username,
+      contexts: ["editable"],
     });
     return id;
   });
@@ -122,7 +130,7 @@ async function removeCredentialContextMenuItems(): Promise<void> {
       } catch {
         // Context menu items are transient and may already be gone after extension reloads.
       }
-    })
+    }),
   );
   vaultContextMenuChildIds = [];
 }
@@ -130,12 +138,12 @@ async function removeCredentialContextMenuItems(): Promise<void> {
 const oidcTabFlow: ExtensionOidcTabFlowApi = {
   openAuthUrlAndWaitForCallback(authUrl, callbackUrlPrefix) {
     return openAuthUrlAndWaitForCallback(authUrl, callbackUrlPrefix);
-  }
+  },
 };
 
 async function openAuthUrlAndWaitForCallback(
   authUrl: string,
-  callbackUrlPrefix: string
+  callbackUrlPrefix: string,
 ): Promise<string> {
   const tab = await browser.tabs.create({ active: true, url: authUrl });
 
@@ -149,10 +157,13 @@ async function openAuthUrlAndWaitForCallback(
         cleanup();
         reject(new Error("OIDC login timed out"));
       },
-      5 * 60 * 1000
+      5 * 60 * 1000,
     );
 
-    const onUpdated = (tabId: number, changeInfo: browser.tabs._OnUpdatedChangeInfo): void => {
+    const onUpdated = (
+      tabId: number,
+      changeInfo: browser.tabs._OnUpdatedChangeInfo,
+    ): void => {
       if (tabId !== tab.id || changeInfo.url === undefined) {
         return;
       }

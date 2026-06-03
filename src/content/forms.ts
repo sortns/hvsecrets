@@ -10,10 +10,12 @@ const usernameSelectors = [
   "input[id*='user' i]",
   "input[name*='login' i]",
   "input[id*='login' i]",
-  "input[type='text']"
+  "input[type='text']",
 ];
 
-export function findLoginFormFields(root: ParentNode = document): LoginFormFields | null {
+export function findLoginFormFields(
+  root: ParentNode = document,
+): LoginFormFields | null {
   const password = findPasswordInput(root);
 
   if (password === null) {
@@ -35,13 +37,16 @@ export function isUsableInput(input: HTMLInputElement): boolean {
 
 function findPasswordInput(root: ParentNode): HTMLInputElement | null {
   const passwordInputs = Array.from(
-    root.querySelectorAll<HTMLInputElement>("input[type='password']")
+    root.querySelectorAll<HTMLInputElement>("input[type='password']"),
   );
 
   return passwordInputs.find(isUsableInput) ?? null;
 }
 
-function findUsernameInput(root: ParentNode, password: HTMLInputElement): HTMLInputElement | null {
+function findUsernameInput(
+  root: ParentNode,
+  password: HTMLInputElement,
+): HTMLInputElement | null {
   const searchRoot = password.form ?? root;
 
   for (const selector of usernameSelectors) {

@@ -59,8 +59,8 @@ export class VaultOidcClient {
       {
         role: params.role,
         redirect_uri: params.redirectUri,
-        client_nonce: clientNonce
-      }
+        client_nonce: clientNonce,
+      },
     );
 
     if (response.data === undefined) {
@@ -69,19 +69,19 @@ export class VaultOidcClient {
 
     if (response.data.auth_url.trim().length === 0) {
       throw new Error(
-        "Vault OIDC auth_url response was empty. The redirect URI is probably not allowed by the Vault role."
+        "Vault OIDC auth_url response was empty. The redirect URI is probably not allowed by the Vault role.",
       );
     }
 
     const authUrl = new URL(
       response.data.auth_url.replaceAll("&amp;", "&"),
-      this.vaultUrl
+      this.vaultUrl,
     ).toString();
     const nonce = new URL(authUrl).searchParams.get("nonce");
 
     if (nonce === null || nonce.length === 0) {
       throw new Error(
-        `Vault OIDC auth_url response did not include nonce. Returned URL: ${redactUrl(authUrl)}`
+        `Vault OIDC auth_url response did not include nonce. Returned URL: ${redactUrl(authUrl)}`,
       );
     }
 
@@ -89,7 +89,7 @@ export class VaultOidcClient {
       authUrl,
       nonce,
       clientNonce,
-      redirectUri: params.redirectUri
+      redirectUri: params.redirectUri,
     };
   }
 
@@ -103,29 +103,31 @@ export class VaultOidcClient {
       code: params.code,
       state: params.state,
       nonce: params.nonce,
-      client_nonce: params.clientNonce
+      client_nonce: params.clientNonce,
     });
     const response = await this.request(
       "GET",
-      `/v1/auth/${this.authMount}/oidc/callback?${query.toString()}`
+      `/v1/auth/${this.authMount}/oidc/callback?${query.toString()}`,
     );
     const token = response.auth?.client_token;
 
     if (token === undefined || token.length === 0) {
-      throw new Error("Vault OIDC callback response did not include client token");
+      throw new Error(
+        "Vault OIDC callback response did not include client token",
+      );
     }
 
     return {
       clientToken: token,
       leaseDuration: response.auth?.lease_duration ?? 0,
-      renewable: response.auth?.renewable ?? false
+      renewable: response.auth?.renewable ?? false,
     };
   }
 
   private async request<TData = never>(
     method: string,
     apiPath: string,
-    body?: unknown
+    body?: unknown,
   ): Promise<VaultEnvelope<TData>> {
     const headers = new Headers();
 
@@ -140,7 +142,7 @@ export class VaultOidcClient {
     const response = await this.fetchImpl(`${this.vaultUrl}${apiPath}`, {
       method,
       headers,
-      body: body === undefined ? undefined : JSON.stringify(body)
+      body: body === undefined ? undefined : JSON.stringify(body),
     });
     const envelope = await parseVaultEnvelope<TData>(response);
 
@@ -148,7 +150,7 @@ export class VaultOidcClient {
       throw new VaultClientError(
         `Vault request failed with status ${String(response.status)}`,
         response.status,
-        envelope.errors ?? []
+        envelope.errors ?? [],
       );
     }
 
@@ -156,7 +158,9 @@ export class VaultOidcClient {
   }
 }
 
-async function parseVaultEnvelope<TData>(response: Response): Promise<VaultEnvelope<TData>> {
+async function parseVaultEnvelope<TData>(
+  response: Response,
+): Promise<VaultEnvelope<TData>> {
   const text = await response.text();
 
   if (text.trim().length === 0) {
@@ -183,7 +187,11 @@ function redactUrl(value: string): string {
 }
 
 function isSensitiveQueryKey(key: string): boolean {
-  return ["code", "client_secret", "id_token", "access_token", "refresh_token"].includes(
-    key.toLowerCase()
-  );
+  return [
+    "code",
+    "client_secret",
+    "id_token",
+    "access_token",
+    "refresh_token",
+  ].includes(key.toLowerCase());
 }

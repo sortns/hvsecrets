@@ -41,7 +41,9 @@ async function loadConfig(): Promise<void> {
 
   applyConfig(response.config);
   setStatus(
-    response.validation.ok ? "Configuration loaded" : response.validation.errors.join(". ")
+    response.validation.ok
+      ? "Configuration loaded"
+      : response.validation.errors.join(". "),
   );
 
   if (response.validation.ok) {
@@ -58,7 +60,11 @@ async function saveConfig(): Promise<void> {
   }
 
   applyConfig(response.config);
-  setStatus(response.validation.ok ? "Configuration saved" : response.validation.errors.join(". "));
+  setStatus(
+    response.validation.ok
+      ? "Configuration saved"
+      : response.validation.errors.join(". "),
+  );
 }
 
 async function saveCurrentFormConfig(): Promise<RuntimeResponse> {
@@ -74,10 +80,10 @@ async function saveCurrentFormConfig(): Promise<RuntimeResponse> {
       authMode: authModeField(formData),
       oidcAuthMount: stringField(formData, "oidcAuthMount"),
       oidcRole: stringField(formData, "oidcRole"),
-      vaultNamespace: stringField(formData, "vaultNamespace")
+      vaultNamespace: stringField(formData, "vaultNamespace"),
     },
     vaultToken: vaultToken.length === 0 ? undefined : vaultToken,
-    clearToken: formData.get("clearToken") === "on"
+    clearToken: formData.get("clearToken") === "on",
   });
 }
 
@@ -112,7 +118,7 @@ async function checkConnection(): Promise<void> {
   setStatus(
     response.ok
       ? "Vault connection is healthy; token is valid"
-      : (response.error ?? "Vault connection or token validation failed")
+      : (response.error ?? "Vault connection or token validation failed"),
   );
 }
 
@@ -138,11 +144,17 @@ async function loginWithOidc(): Promise<void> {
     oidcRedirectUriElement.textContent = `Vault OIDC redirect URI: ${response.redirectUri}`;
   }
 
-  setStatus(response.ok ? "OIDC login succeeded" : (response.error ?? "OIDC login failed"));
+  setStatus(
+    response.ok
+      ? "OIDC login succeeded"
+      : (response.error ?? "OIDC login failed"),
+  );
 }
 
 async function loadIgnoredOrigins(): Promise<void> {
-  const response = await sendRuntimeRequest({ type: "settings.ignoredOrigins.list" });
+  const response = await sendRuntimeRequest({
+    type: "settings.ignoredOrigins.list",
+  });
 
   if (response.type !== "settings.ignoredOrigins") {
     setStatus("Unable to load ignored origins");
@@ -162,7 +174,7 @@ async function addIgnoredOriginFromForm(): Promise<void> {
 
   const response = await sendRuntimeRequest({
     type: "settings.ignoredOrigins.add",
-    origin
+    origin,
   });
 
   if (response.type !== "settings.ignoredOrigins") {
@@ -178,7 +190,7 @@ async function addIgnoredOriginFromForm(): Promise<void> {
 async function removeIgnoredOrigin(origin: string): Promise<void> {
   const response = await sendRuntimeRequest({
     type: "settings.ignoredOrigins.remove",
-    origin
+    origin,
   });
 
   if (response.type !== "settings.ignoredOrigins") {
@@ -229,7 +241,7 @@ function applyConfig(config: ExtensionConfig): void {
   oidcRedirectUriElement.textContent = "";
 
   const authModeInput = document.querySelector<HTMLInputElement>(
-    `input[name="authMode"][value="${config.authMode}"]`
+    `input[name="authMode"][value="${config.authMode}"]`,
   );
   authModeInput?.click();
   updateAuthModeVisibility();
@@ -241,7 +253,9 @@ function updateAuthModeVisibility(): void {
   oidcFields.hidden = authMode !== "oidc";
 }
 
-async function sendRuntimeRequest(request: RuntimeRequest): Promise<RuntimeResponse> {
+async function sendRuntimeRequest(
+  request: RuntimeRequest,
+): Promise<RuntimeResponse> {
   return browser.runtime.sendMessage(request) as Promise<RuntimeResponse>;
 }
 
