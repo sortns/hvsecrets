@@ -18,6 +18,7 @@ Use `unlisted` for internal testing. Use `listed` when the extension should be i
 5. Add this optional GitHub repository variable:
    - `AMO_CHANNEL`: `unlisted` or `listed`. If omitted, the workflow uses `unlisted`.
    - `AMO_UPLOAD_SOURCE`: set to `true` to upload a source archive during AMO signing.
+   - `AMO_METADATA`: set to `.github/amo-metadata.json` so the API-created version carries a license. AMO's version-create API rejects listed submissions with `license` missing even when a license is already selected on the add-on's Developer Hub listing page; the dashboard setting does not get applied automatically to API-created versions.
 
 For listed publishing, AMO needs public listing metadata and review information. The first listed submission is usually easiest to do in Developer Hub so you can fill in the listing, privacy, permissions, and review fields interactively. After the listing exists, tagged releases can publish updates through the GitHub workflow.
 
