@@ -92,6 +92,20 @@ fieldset {
   padding: 12px;
 }
 
+#token-fields,
+#oidc-fields,
+#approle-fields {
+  display: grid;
+  gap: 12px;
+  margin-top: 4px;
+}
+
+#token-fields[hidden],
+#oidc-fields[hidden],
+#approle-fields[hidden] {
+  display: none;
+}
+
 input {
   background: var(--field);
   border: 1px solid var(--border);

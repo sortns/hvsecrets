@@ -5,6 +5,23 @@ const vaultContextMenuRootId = "hvsecrets-use-saved-password";
 const vaultContextMenuCredentialPrefix = "hvsecrets-fill:";
 let vaultContextMenuChildIds: string[] = [];
 
+// Firefox for Android does not implement the contextMenus API. Registering
+// listeners on it unconditionally throws during background script startup
+// and aborts the rest of this module (including the oidcTabFlow binding
+// below), which breaks every runtime message the popup/options/content
+// scripts send. Feature-detect it instead of assuming it exists.
+const contextMenusApi = (
+  browser as unknown as {
+    readonly contextMenus?: typeof browser.contextMenus;
+  }
+).contextMenus;
+
+const oidcTabFlow: ExtensionOidcTabFlowApi = {
+  openAuthUrlAndWaitForCallback(authUrl, callbackUrlPrefix) {
+    return openAuthUrlAndWaitForCallback(authUrl, callbackUrlPrefix);
+  },
+};
+
 browser.runtime.onInstalled.addListener(() => {
   void installContextMenu();
 });
@@ -30,41 +47,48 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
   );
 });
 
-browser.contextMenus.onClicked.addListener((info, tab) => {
-  if (typeof info.menuItemId !== "string" || tab === undefined) {
-    return;
-  }
+if (contextMenusApi !== undefined) {
+  contextMenusApi.onClicked.addListener((info, tab) => {
+    if (typeof info.menuItemId !== "string" || tab === undefined) {
+      return;
+    }
 
-  if (!info.menuItemId.startsWith(vaultContextMenuCredentialPrefix)) {
-    return;
-  }
+    if (!info.menuItemId.startsWith(vaultContextMenuCredentialPrefix)) {
+      return;
+    }
 
-  const credentialId = info.menuItemId.slice(
-    vaultContextMenuCredentialPrefix.length,
-  );
+    const credentialId = info.menuItemId.slice(
+      vaultContextMenuCredentialPrefix.length,
+    );
 
-  void handleRuntimeRequest(
-    {
-      type: "credentials.fillCurrentTab",
-      credentialId,
-    },
-    browser.storage.local,
-    {
-      query: () => Promise.resolve([tab]),
-      sendMessage: (tabId, request) => browser.tabs.sendMessage(tabId, request),
-    },
-    { tab },
-    oidcTabFlow,
-  );
-});
+    void handleRuntimeRequest(
+      {
+        type: "credentials.fillCurrentTab",
+        credentialId,
+      },
+      browser.storage.local,
+      {
+        query: () => Promise.resolve([tab]),
+        sendMessage: (tabId, request) =>
+          browser.tabs.sendMessage(tabId, request),
+      },
+      { tab },
+      oidcTabFlow,
+    );
+  });
 
-browser.contextMenus.onShown.addListener((_info, tab) => {
-  void refreshCredentialContextMenu(tab);
-});
+  contextMenusApi.onShown.addListener((_info, tab) => {
+    void refreshCredentialContextMenu(tab);
+  });
+}
 
 async function installContextMenu(): Promise<void> {
-  await browser.contextMenus.removeAll();
-  browser.contextMenus.create({
+  if (contextMenusApi === undefined) {
+    return;
+  }
+
+  await contextMenusApi.removeAll();
+  contextMenusApi.create({
     id: vaultContextMenuRootId,
     title: "HVSecrets: Use saved password",
     contexts: ["editable"],
@@ -74,10 +98,14 @@ async function installContextMenu(): Promise<void> {
 async function refreshCredentialContextMenu(
   tab?: browser.tabs.Tab,
 ): Promise<void> {
+  if (contextMenusApi === undefined) {
+    return;
+  }
+
   await removeCredentialContextMenuItems();
 
   if (tab === undefined) {
-    void browser.contextMenus.refresh();
+    void contextMenusApi.refresh();
     return;
   }
 
@@ -96,7 +124,7 @@ async function refreshCredentialContextMenu(
     response.credentials.length === 0
   ) {
     const emptyId = `${vaultContextMenuCredentialPrefix}empty`;
-    void browser.contextMenus.create({
+    void contextMenusApi.create({
       id: emptyId,
       parentId: vaultContextMenuRootId,
       title: "No saved logins for this site",
@@ -104,13 +132,13 @@ async function refreshCredentialContextMenu(
       enabled: false,
     });
     vaultContextMenuChildIds = [emptyId];
-    void browser.contextMenus.refresh();
+    void contextMenusApi.refresh();
     return;
   }
 
   vaultContextMenuChildIds = response.credentials.map((credential) => {
     const id = `${vaultContextMenuCredentialPrefix}${credential.id}`;
-    void browser.contextMenus.create({
+    void contextMenusApi.create({
       id,
       parentId: vaultContextMenuRootId,
       title:
@@ -119,14 +147,19 @@ async function refreshCredentialContextMenu(
     });
     return id;
   });
-  void browser.contextMenus.refresh();
+  void contextMenusApi.refresh();
 }
 
 async function removeCredentialContextMenuItems(): Promise<void> {
+  if (contextMenusApi === undefined) {
+    vaultContextMenuChildIds = [];
+    return;
+  }
+
   await Promise.all(
     vaultContextMenuChildIds.map(async (id) => {
       try {
-        await browser.contextMenus.remove(id);
+        await contextMenusApi.remove(id);
       } catch {
         // Context menu items are transient and may already be gone after extension reloads.
       }
@@ -134,12 +167,6 @@ async function removeCredentialContextMenuItems(): Promise<void> {
   );
   vaultContextMenuChildIds = [];
 }
-
-const oidcTabFlow: ExtensionOidcTabFlowApi = {
-  openAuthUrlAndWaitForCallback(authUrl, callbackUrlPrefix) {
-    return openAuthUrlAndWaitForCallback(authUrl, callbackUrlPrefix);
-  },
-};
 
 async function openAuthUrlAndWaitForCallback(
   authUrl: string,

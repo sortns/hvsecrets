@@ -38,6 +38,38 @@ describe("background request handlers", () => {
     });
   });
 
+  it("returns a graceful error instead of throwing when searching credentials without a configured token", async () => {
+    const response = await handleRuntimeRequest(
+      { type: "credentials.search", query: "" },
+      createMemoryStorage(),
+      createTabsApi({}),
+    );
+
+    expect(response).toEqual({
+      type: "credentials.searchResult",
+      credentials: [],
+      error: "Vault token is not configured",
+    });
+  });
+
+  it("returns a graceful error instead of throwing when revealing a credential without a configured token", async () => {
+    const response = await handleRuntimeRequest(
+      {
+        type: "credentials.reveal",
+        origin: "https://example.com",
+        credentialId: "11111111-1111-1111-1111-111111111111",
+      },
+      createMemoryStorage(),
+      createTabsApi({}),
+    );
+
+    expect(response).toEqual({
+      type: "credentials.revealResult",
+      ok: false,
+      error: "Vault token is not configured",
+    });
+  });
+
   it("returns an actionable error when OIDC login has no browser tab flow", async () => {
     const response = await handleRuntimeRequest(
       { type: "auth.loginOidc" },
@@ -76,6 +108,8 @@ describe("background request handlers", () => {
         authMode: "oidc",
         oidcAuthMount: "oidc",
         oidcRole: "hvsecrets",
+        approleAuthMount: "approle",
+        approleRoleId: "",
         vaultNamespace: "",
       },
     });
@@ -128,6 +162,152 @@ describe("background request handlers", () => {
         tokenRenewable: true,
       }),
     );
+  });
+
+  it("runs the Vault AppRole login flow and stores the returned token", async () => {
+    const storage = createMemoryStorage({
+      [configStorageKey]: {
+        vaultUrl: "http://vault.example",
+        kvMount: "secret",
+        basePath: "hvsecrets",
+        authMode: "approle",
+        oidcAuthMount: "oidc",
+        oidcRole: "hvsecrets",
+        approleAuthMount: "approle",
+        approleRoleId: "role-id",
+        vaultNamespace: "",
+      },
+      [secretsStorageKey]: {
+        approleSecretId: "secret-id",
+      },
+    });
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValueOnce(
+      jsonResponse({
+        auth: {
+          client_token: "approle-token",
+          lease_duration: 3600,
+          renewable: true,
+        },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchImpl);
+
+    const response = await handleRuntimeRequest(
+      { type: "auth.loginApprole" },
+      storage,
+      createTabsApi({}),
+    );
+
+    expect(response).toEqual(
+      expect.objectContaining({
+        type: "auth.approleLoginResult",
+        ok: true,
+        renewable: true,
+      }),
+    );
+    expect(fetchImpl.mock.calls[0]?.[0]).toBe(
+      "http://vault.example/v1/auth/approle/login",
+    );
+    const storedSecrets = (await storage.get(secretsStorageKey))[
+      secretsStorageKey
+    ] as Record<string, unknown> | undefined;
+    expect(storedSecrets).toEqual(
+      expect.objectContaining({
+        vaultToken: "approle-token",
+        tokenRenewable: true,
+        approleSecretId: "secret-id",
+      }),
+    );
+  });
+
+  it("returns an actionable error when AppRole login is missing a secret ID", async () => {
+    const storage = createMemoryStorage({
+      [configStorageKey]: {
+        vaultUrl: "http://vault.example",
+        kvMount: "secret",
+        basePath: "hvsecrets",
+        authMode: "approle",
+        oidcAuthMount: "oidc",
+        oidcRole: "hvsecrets",
+        approleAuthMount: "approle",
+        approleRoleId: "role-id",
+        vaultNamespace: "",
+      },
+    });
+
+    const response = await handleRuntimeRequest(
+      { type: "auth.loginApprole" },
+      storage,
+      createTabsApi({}),
+    );
+
+    expect(response).toEqual({
+      type: "auth.approleLoginResult",
+      ok: false,
+      error: "AppRole secret ID is required",
+    });
+  });
+
+  it("reports an expired-session error instead of hanging when saving a pending credential fails with 403", async () => {
+    const storage = createMemoryStorage({
+      [configStorageKey]: {
+        vaultUrl: "http://vault.example",
+        kvMount: "secret",
+        basePath: "hvsecrets",
+        authMode: "oidc",
+        oidcAuthMount: "oidc",
+        oidcRole: "hvsecrets",
+        approleAuthMount: "approle",
+        approleRoleId: "",
+        vaultNamespace: "",
+      },
+      [secretsStorageKey]: {
+        vaultToken: "expired-token",
+      },
+    });
+    const sender = { tab: { url: "https://example.com/login" } };
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(jsonResponse({ data: { keys: [] } }))
+      .mockResolvedValueOnce(jsonResponse({ data: { keys: [] } }))
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ errors: ["permission denied"] }), {
+          status: 403,
+        }),
+      );
+    vi.stubGlobal("fetch", fetchImpl);
+
+    const captureResponse = await handleRuntimeRequest(
+      {
+        type: "credentials.captureLoginAttempt",
+        credential: {
+          url: "https://example.com/login",
+          title: "Example",
+          username: "alice",
+          password: "hunter2",
+        },
+      },
+      storage,
+      createTabsApi({}),
+      sender,
+    );
+    expect(captureResponse).toEqual({
+      type: "credentials.captureResult",
+      ok: true,
+    });
+
+    const saveResponse = await handleRuntimeRequest(
+      { type: "credentials.savePendingForSenderOrigin" },
+      storage,
+      createTabsApi({}),
+      sender,
+    );
+
+    expect(saveResponse).toEqual({
+      type: "credentials.saveResult",
+      ok: false,
+      error: "Vault session expired. Please log in again.",
+    });
   });
 });
 

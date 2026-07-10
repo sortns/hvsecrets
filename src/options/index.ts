@@ -7,10 +7,12 @@ const statusElement = getElement("status") as HTMLParagraphElement;
 const validateButton = getElement("validate-token") as HTMLButtonElement;
 const oidcLoginButton = getElement("login-oidc") as HTMLButtonElement;
 const oidcRedirectUriElement = getElement("oidc-redirect-uri");
+const approleLoginButton = getElement("login-approle") as HTMLButtonElement;
 const ignoredOriginForm = getElement("ignored-origin-form") as HTMLFormElement;
 const ignoredOriginsElement = getElement("ignored-origins");
 const tokenFields = getElement("token-fields");
 const oidcFields = getElement("oidc-fields");
+const approleFields = getElement("approle-fields");
 
 void loadConfig();
 void loadIgnoredOrigins();
@@ -25,6 +27,9 @@ validateButton.addEventListener("click", () => {
 });
 oidcLoginButton.addEventListener("click", () => {
   void loginWithOidc();
+});
+approleLoginButton.addEventListener("click", () => {
+  void loginWithApprole();
 });
 ignoredOriginForm.addEventListener("submit", (event) => {
   event.preventDefault();
@@ -70,6 +75,7 @@ async function saveConfig(): Promise<void> {
 async function saveCurrentFormConfig(): Promise<RuntimeResponse> {
   const formData = new FormData(form);
   const vaultToken = stringField(formData, "vaultToken").trim();
+  const approleSecretId = stringField(formData, "approleSecretId").trim();
 
   return sendRuntimeRequest({
     type: "config.save",
@@ -80,10 +86,14 @@ async function saveCurrentFormConfig(): Promise<RuntimeResponse> {
       authMode: authModeField(formData),
       oidcAuthMount: stringField(formData, "oidcAuthMount"),
       oidcRole: stringField(formData, "oidcRole"),
+      approleAuthMount: stringField(formData, "approleAuthMount"),
+      approleRoleId: stringField(formData, "approleRoleId"),
       vaultNamespace: stringField(formData, "vaultNamespace"),
     },
     vaultToken: vaultToken.length === 0 ? undefined : vaultToken,
     clearToken: formData.get("clearToken") === "on",
+    approleSecretId: approleSecretId.length === 0 ? undefined : approleSecretId,
+    clearApproleSecretId: formData.get("clearApproleSecretId") === "on",
   });
 }
 
@@ -149,6 +159,39 @@ async function loginWithOidc(): Promise<void> {
       ? "OIDC login succeeded"
       : (response.error ?? "OIDC login failed"),
   );
+}
+
+async function loginWithApprole(): Promise<void> {
+  setStatus("Saving configuration");
+  const saveResponse = await saveCurrentFormConfig();
+
+  if (saveResponse.type !== "config.state") {
+    setStatus("Unable to save configuration");
+    return;
+  }
+
+  applyConfig(saveResponse.config);
+  setStatus("Starting AppRole login");
+  const response = await sendRuntimeRequest({ type: "auth.loginApprole" });
+
+  if (response.type !== "auth.approleLoginResult") {
+    setStatus("Unable to start AppRole login");
+    return;
+  }
+
+  setStatus(
+    response.ok
+      ? "AppRole login succeeded"
+      : (response.error ?? "AppRole login failed"),
+  );
+
+  if (response.ok) {
+    const refreshed = await sendRuntimeRequest({ type: "config.get" });
+
+    if (refreshed.type === "config.state") {
+      applyConfig(refreshed.config);
+    }
+  }
 }
 
 async function loadIgnoredOrigins(): Promise<void> {
@@ -239,6 +282,10 @@ function applyConfig(config: ExtensionConfig): void {
   setInputValue("vault-token", "");
   setChecked("clear-token", false);
   oidcRedirectUriElement.textContent = "";
+  setInputValue("approle-auth-mount", config.approleAuthMount);
+  setInputValue("approle-role-id", config.approleRoleId);
+  setInputValue("approle-secret-id", "");
+  setChecked("clear-approle-secret-id", false);
 
   const authModeInput = document.querySelector<HTMLInputElement>(
     `input[name="authMode"][value="${config.authMode}"]`,
@@ -251,6 +298,7 @@ function updateAuthModeVisibility(): void {
   const authMode = authModeField(new FormData(form));
   tokenFields.hidden = authMode !== "token";
   oidcFields.hidden = authMode !== "oidc";
+  approleFields.hidden = authMode !== "approle";
 }
 
 async function sendRuntimeRequest(
@@ -266,7 +314,9 @@ function stringField(formData: FormData, name: string): string {
 }
 
 function authModeField(formData: FormData): AuthMode {
-  return stringField(formData, "authMode") === "oidc" ? "oidc" : "token";
+  const value = stringField(formData, "authMode");
+
+  return value === "oidc" || value === "approle" ? value : "token";
 }
 
 function setInputValue(id: string, value: string): void {

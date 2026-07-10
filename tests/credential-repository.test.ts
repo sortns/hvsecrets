@@ -96,6 +96,58 @@ describe("CredentialRepository", () => {
     );
   });
 
+  it("searches credentials across every origin", async () => {
+    const client = createFakeClient({
+      "hvsecrets/credentials/https.example.com/id-1": {
+        schema: 1,
+        origin: "https://example.com",
+        realm: null,
+        username: "alice",
+        password: "secret",
+        url: "https://example.com/login",
+        title: "Example",
+        created_at: "2026-05-26T00:00:00.000Z",
+        updated_at: "2026-05-26T00:00:00.000Z",
+        tags: [],
+        notes: "",
+      },
+      "hvsecrets/credentials/https.other.example/id-2": {
+        schema: 1,
+        origin: "https://other.example",
+        realm: null,
+        username: "bob",
+        password: "secret2",
+        url: "https://other.example/login",
+        title: "Other",
+        created_at: "2026-05-26T00:00:00.000Z",
+        updated_at: "2026-05-26T00:00:00.000Z",
+        tags: [],
+        notes: "",
+      },
+    });
+    const repository = new CredentialRepository(client, "hvsecrets");
+
+    const results = await repository.searchAll();
+
+    expect(results).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: "id-1", origin: "https://example.com" }),
+        expect.objectContaining({
+          id: "id-2",
+          origin: "https://other.example",
+        }),
+      ]),
+    );
+    expect(results).toHaveLength(2);
+  });
+
+  it("returns an empty search result when the credentials root does not exist yet", async () => {
+    const client = createFakeClient();
+    const repository = new CredentialRepository(client, "hvsecrets");
+
+    await expect(repository.searchAll()).resolves.toEqual([]);
+  });
+
   it("detects exact credentials for an origin and username", async () => {
     const client = createFakeClient({
       "hvsecrets/credentials/https.example.com/id-1": {
@@ -161,11 +213,22 @@ function createFakeClient(
     },
     list(path: string) {
       const prefix = `${path}/`;
-      const keys = Object.keys(records)
-        .filter((recordPath) => recordPath.startsWith(prefix))
-        .map((recordPath) => recordPath.slice(prefix.length));
+      const immediateKeys = new Set<string>();
 
-      return Promise.resolve(keys);
+      for (const recordPath of Object.keys(records)) {
+        if (!recordPath.startsWith(prefix)) {
+          continue;
+        }
+
+        const rest = recordPath.slice(prefix.length);
+        const slashIndex = rest.indexOf("/");
+
+        immediateKeys.add(
+          slashIndex === -1 ? rest : `${rest.slice(0, slashIndex)}/`,
+        );
+      }
+
+      return Promise.resolve([...immediateKeys]);
     },
     read(path: string) {
       const data = records[path];

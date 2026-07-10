@@ -26,6 +26,8 @@ export interface SaveConfigRequest {
   readonly config: ExtensionConfigInput;
   readonly vaultToken?: string;
   readonly clearToken?: boolean;
+  readonly approleSecretId?: string;
+  readonly clearApproleSecretId?: boolean;
 }
 
 export interface SaveVaultTokenRequest {
@@ -49,6 +51,7 @@ export async function getConfig(
   }
 
   return redactConfig({
+    ...defaultConfig,
     ...maybeConfig,
     ...tokenStateFromSecrets(secrets),
   });
@@ -70,8 +73,15 @@ export async function saveConfig(
     requestedToken !== undefined &&
     requestedToken.length > 0 &&
     requestedToken !== existingSecrets.vaultToken?.trim();
-  const nextSecrets: ExtensionSecrets =
-    nextToken === undefined
+  const requestedSecretId = request.approleSecretId?.trim();
+  const nextSecretId =
+    request.clearApproleSecretId === true
+      ? undefined
+      : requestedSecretId !== undefined && requestedSecretId.length > 0
+        ? requestedSecretId
+        : existingSecrets.approleSecretId?.trim();
+  const nextSecrets: ExtensionSecrets = {
+    ...(nextToken === undefined
       ? {}
       : {
           vaultToken: nextToken,
@@ -81,7 +91,9 @@ export async function saveConfig(
           tokenRenewable: isNewToken
             ? false
             : (existingSecrets.tokenRenewable ?? false),
-        };
+        }),
+    ...(nextSecretId === undefined ? {} : { approleSecretId: nextSecretId }),
+  };
   const nextConfig = normalizeConfig(
     request.config,
     tokenStateFromSecrets(nextSecrets),
@@ -222,11 +234,19 @@ function hasUsableToken(secrets: ExtensionSecrets): boolean {
   );
 }
 
+function hasUsableApproleSecretId(secrets: ExtensionSecrets): boolean {
+  return (
+    secrets.approleSecretId !== undefined &&
+    secrets.approleSecretId.trim().length > 0
+  );
+}
+
 function tokenStateFromSecrets(secrets: ExtensionSecrets): TokenState {
   return {
     hasToken: hasUsableToken(secrets),
     tokenExpiresAt: secrets.tokenExpiresAt ?? null,
     tokenRenewable: secrets.tokenRenewable ?? false,
+    hasApproleSecretId: hasUsableApproleSecretId(secrets),
   };
 }
 
@@ -239,9 +259,15 @@ function isStoredConfig(value: unknown): value is ExtensionConfig {
     typeof value.vaultUrl === "string" &&
     typeof value.kvMount === "string" &&
     typeof value.basePath === "string" &&
-    (value.authMode === "token" || value.authMode === "oidc") &&
+    (value.authMode === "token" ||
+      value.authMode === "oidc" ||
+      value.authMode === "approle") &&
     typeof value.oidcAuthMount === "string" &&
     typeof value.oidcRole === "string" &&
+    (value.approleAuthMount === undefined ||
+      typeof value.approleAuthMount === "string") &&
+    (value.approleRoleId === undefined ||
+      typeof value.approleRoleId === "string") &&
     typeof value.vaultNamespace === "string"
   );
 }
@@ -254,7 +280,9 @@ function isStoredSecrets(value: unknown): value is ExtensionSecrets {
       value.tokenExpiresAt === null ||
       typeof value.tokenExpiresAt === "string") &&
     (value.tokenRenewable === undefined ||
-      typeof value.tokenRenewable === "boolean")
+      typeof value.tokenRenewable === "boolean") &&
+    (value.approleSecretId === undefined ||
+      typeof value.approleSecretId === "string")
   );
 }
 

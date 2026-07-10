@@ -1,6 +1,6 @@
 {
   "name": "hvsecrets",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "private": true,
   "type": "module",
   "description": "Browser extension password-manager workflow backed by HashiCorp Vault KV.",

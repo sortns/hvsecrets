@@ -40,6 +40,10 @@
             <input type="radio" name="authMode" value="oidc" />
             OIDC
           </label>
+          <label class="inline">
+            <input type="radio" name="authMode" value="approle" />
+            AppRole
+          </label>
         </fieldset>
         <section id="token-fields">
           <label>
@@ -71,6 +75,38 @@
           </label>
           <button id="login-oidc" type="button">Login With OIDC</button>
           <p id="oidc-redirect-uri"></p>
+        </section>
+        <section id="approle-fields">
+          <label>
+            AppRole auth mount
+            <input
+              id="approle-auth-mount"
+              name="approleAuthMount"
+              autocomplete="off"
+            />
+          </label>
+          <label>
+            AppRole role ID
+            <input id="approle-role-id" name="approleRoleId" autocomplete="off" />
+          </label>
+          <label>
+            AppRole secret ID
+            <input
+              id="approle-secret-id"
+              name="approleSecretId"
+              type="password"
+              autocomplete="off"
+            />
+          </label>
+          <label class="inline">
+            <input
+              id="clear-approle-secret-id"
+              name="clearApproleSecretId"
+              type="checkbox"
+            />
+            Clear saved secret ID
+          </label>
+          <button id="login-approle" type="button">Login With AppRole</button>
         </section>
         <footer>
           <button type="submit">Save</button>

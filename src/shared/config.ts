@@ -1,6 +1,6 @@
 import { normalizeVaultPath, normalizeVaultUrl } from "../vault/paths";
 
-export type AuthMode = "token" | "oidc";
+export type AuthMode = "token" | "oidc" | "approle";
 
 export interface ExtensionConfig {
   readonly vaultUrl: string;
@@ -9,6 +9,9 @@ export interface ExtensionConfig {
   readonly authMode: AuthMode;
   readonly oidcAuthMount: string;
   readonly oidcRole: string;
+  readonly approleAuthMount: string;
+  readonly approleRoleId: string;
+  readonly hasApproleSecretId: boolean;
   readonly vaultNamespace: string;
   readonly hasToken: boolean;
   readonly tokenExpiresAt: string | null;
@@ -22,6 +25,8 @@ export interface ExtensionConfigInput {
   readonly authMode: AuthMode;
   readonly oidcAuthMount?: string;
   readonly oidcRole?: string;
+  readonly approleAuthMount?: string;
+  readonly approleRoleId?: string;
   readonly vaultNamespace?: string;
 }
 
@@ -29,6 +34,7 @@ export interface ExtensionSecrets {
   readonly vaultToken?: string;
   readonly tokenExpiresAt?: string | null;
   readonly tokenRenewable?: boolean;
+  readonly approleSecretId?: string;
 }
 
 export interface ConfigValidationResult {
@@ -46,6 +52,9 @@ export const defaultConfig: ExtensionConfig = {
   authMode: "token",
   oidcAuthMount: envString("VITE_VAULT_OIDC_AUTH_MOUNT", "oidc"),
   oidcRole: envString("VITE_VAULT_OIDC_ROLE", "hvsecrets"),
+  approleAuthMount: envString("VITE_VAULT_APPROLE_AUTH_MOUNT", "approle"),
+  approleRoleId: envString("VITE_VAULT_APPROLE_ROLE_ID", ""),
+  hasApproleSecretId: false,
   vaultNamespace: "",
   hasToken: false,
   tokenExpiresAt: null,
@@ -56,6 +65,7 @@ export interface TokenState {
   readonly hasToken: boolean;
   readonly tokenExpiresAt: string | null;
   readonly tokenRenewable: boolean;
+  readonly hasApproleSecretId: boolean;
 }
 
 export function normalizeConfig(
@@ -71,6 +81,10 @@ export function normalizeConfig(
       input.oidcAuthMount ?? defaultConfig.oidcAuthMount,
     ),
     oidcRole: (input.oidcRole ?? defaultConfig.oidcRole).trim(),
+    approleAuthMount: normalizeVaultPath(
+      input.approleAuthMount ?? defaultConfig.approleAuthMount,
+    ),
+    approleRoleId: (input.approleRoleId ?? defaultConfig.approleRoleId).trim(),
     vaultNamespace: (input.vaultNamespace ?? "").trim(),
     ...tokenState,
   };
@@ -95,6 +109,22 @@ export function validateConfig(
 
   if (config.authMode === "oidc" && isExpiredToken(config.tokenExpiresAt)) {
     errors.push("OIDC token is expired; login again");
+  }
+
+  if (config.authMode === "approle" && config.approleRoleId.length === 0) {
+    errors.push("AppRole role ID is required for AppRole auth");
+  }
+
+  if (config.authMode === "approle" && !config.hasApproleSecretId) {
+    errors.push("AppRole secret ID is required for AppRole auth");
+  }
+
+  if (config.authMode === "approle" && !config.hasToken) {
+    errors.push("AppRole login is required");
+  }
+
+  if (config.authMode === "approle" && isExpiredToken(config.tokenExpiresAt)) {
+    errors.push("AppRole token is expired; login again");
   }
 
   return {

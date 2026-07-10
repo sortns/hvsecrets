@@ -24,9 +24,12 @@ export type RuntimeRequest =
       readonly config: ExtensionConfigInput;
       readonly vaultToken?: string;
       readonly clearToken?: boolean;
+      readonly approleSecretId?: string;
+      readonly clearApproleSecretId?: boolean;
     }
   | { readonly type: "auth.validateToken" }
   | { readonly type: "auth.loginOidc" }
+  | { readonly type: "auth.loginApprole" }
   | { readonly type: "settings.ignoredOrigins.list" }
   | { readonly type: "settings.ignoredOrigins.add"; readonly origin: string }
   | { readonly type: "settings.ignoredOrigins.remove"; readonly origin: string }
@@ -56,7 +59,13 @@ export type RuntimeRequest =
   | { readonly type: "credentials.savePendingForSenderOrigin" }
   | { readonly type: "credentials.dismissPendingForCurrentTab" }
   | { readonly type: "credentials.dismissPendingForSenderOrigin" }
-  | { readonly type: "credentials.ignoreSenderOrigin" };
+  | { readonly type: "credentials.ignoreSenderOrigin" }
+  | { readonly type: "credentials.search"; readonly query: string }
+  | {
+      readonly type: "credentials.reveal";
+      readonly origin: string;
+      readonly credentialId: string;
+    };
 
 export type RuntimeResponse =
   | {
@@ -76,6 +85,13 @@ export type RuntimeResponse =
       readonly tokenExpiresAt?: string | null;
       readonly renewable?: boolean;
       readonly redirectUri?: string;
+      readonly error?: string;
+    }
+  | {
+      readonly type: "auth.approleLoginResult";
+      readonly ok: boolean;
+      readonly tokenExpiresAt?: string | null;
+      readonly renewable?: boolean;
       readonly error?: string;
     }
   | {
@@ -108,6 +124,17 @@ export type RuntimeResponse =
       readonly type: "credentials.captureResult";
       readonly ok: boolean;
       readonly error?: string;
+    }
+  | {
+      readonly type: "credentials.searchResult";
+      readonly credentials: readonly CredentialSummary[];
+      readonly error?: string;
+    }
+  | {
+      readonly type: "credentials.revealResult";
+      readonly ok: boolean;
+      readonly password?: string;
+      readonly error?: string;
     };
 
 export function isRuntimeRequest(value: unknown): value is RuntimeRequest {
@@ -127,6 +154,7 @@ export function isRuntimeRequest(value: unknown): value is RuntimeRequest {
     case "credentials.dismissPendingForSenderOrigin":
     case "auth.validateToken":
     case "auth.loginOidc":
+    case "auth.loginApprole":
     case "settings.ignoredOrigins.list":
     case "credentials.ignoreSenderOrigin":
       return true;
@@ -153,6 +181,15 @@ export function isRuntimeRequest(value: unknown): value is RuntimeRequest {
       );
     case "credentials.captureLoginAttempt":
       return isCapturedCredentialInput(value.credential);
+    case "credentials.search":
+      return isBoundedString(value.query, maxUsernameLength, false);
+    case "credentials.reveal":
+      return (
+        isBoundedString(value.origin, maxUrlLength, true) &&
+        isHttpUrl(value.origin) &&
+        typeof value.credentialId === "string" &&
+        credentialIdPattern.test(value.credentialId)
+      );
     default:
       return false;
   }
@@ -164,16 +201,26 @@ function isConfigSaveRequest(value: Record<string, unknown>): boolean {
     isBoundedString(value.config.vaultUrl, maxUrlLength, true) &&
     isBoundedString(value.config.kvMount, maxUrlLength, true) &&
     isBoundedString(value.config.basePath, maxUrlLength, true) &&
-    (value.config.authMode === "token" || value.config.authMode === "oidc") &&
+    (value.config.authMode === "token" ||
+      value.config.authMode === "oidc" ||
+      value.config.authMode === "approle") &&
     (value.config.oidcAuthMount === undefined ||
       isBoundedString(value.config.oidcAuthMount, maxUrlLength, true)) &&
     (value.config.oidcRole === undefined ||
       isBoundedString(value.config.oidcRole, maxUsernameLength, true)) &&
+    (value.config.approleAuthMount === undefined ||
+      isBoundedString(value.config.approleAuthMount, maxUrlLength, false)) &&
+    (value.config.approleRoleId === undefined ||
+      isBoundedString(value.config.approleRoleId, maxUsernameLength, false)) &&
     (value.config.vaultNamespace === undefined ||
       isBoundedString(value.config.vaultNamespace, maxUrlLength, false)) &&
     (value.vaultToken === undefined ||
       isBoundedString(value.vaultToken, maxPasswordLength, true)) &&
-    (value.clearToken === undefined || typeof value.clearToken === "boolean")
+    (value.clearToken === undefined || typeof value.clearToken === "boolean") &&
+    (value.approleSecretId === undefined ||
+      isBoundedString(value.approleSecretId, maxPasswordLength, true)) &&
+    (value.clearApproleSecretId === undefined ||
+      typeof value.clearApproleSecretId === "boolean")
   );
 }
 

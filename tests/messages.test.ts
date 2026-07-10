@@ -65,6 +65,62 @@ describe("runtime message validation", () => {
     ).toBe(false);
   });
 
+  it("accepts a config.save message with blank AppRole fields when not using AppRole auth", () => {
+    expect(
+      isRuntimeRequest({
+        type: "config.save",
+        config: {
+          vaultUrl: "https://vault.example",
+          kvMount: "secret",
+          basePath: "hvsecrets",
+          authMode: "oidc",
+          oidcAuthMount: "oidc",
+          oidcRole: "hvsecrets",
+          approleAuthMount: "approle",
+          approleRoleId: "",
+          vaultNamespace: "",
+        },
+        vaultToken: undefined,
+        clearToken: false,
+        approleSecretId: undefined,
+        clearApproleSecretId: false,
+      }),
+    ).toBe(true);
+  });
+
+  it("validates credential search and reveal messages", () => {
+    expect(
+      isRuntimeRequest({ type: "credentials.search", query: "" }),
+    ).toBe(true);
+    expect(
+      isRuntimeRequest({ type: "credentials.search", query: "example" }),
+    ).toBe(true);
+    expect(
+      isRuntimeRequest({ type: "credentials.search", query: "x".repeat(600) }),
+    ).toBe(false);
+    expect(
+      isRuntimeRequest({
+        type: "credentials.reveal",
+        origin: "https://example.com",
+        credentialId: "11111111-1111-1111-1111-111111111111",
+      }),
+    ).toBe(true);
+    expect(
+      isRuntimeRequest({
+        type: "credentials.reveal",
+        origin: "javascript:alert(1)",
+        credentialId: "11111111-1111-1111-1111-111111111111",
+      }),
+    ).toBe(false);
+    expect(
+      isRuntimeRequest({
+        type: "credentials.reveal",
+        origin: "https://example.com",
+        credentialId: "../secret",
+      }),
+    ).toBe(false);
+  });
+
   it("validates content fill messages before touching page fields", () => {
     expect(
       isFillCredentialMessage({

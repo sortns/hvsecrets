@@ -33,9 +33,26 @@
         <button id="refresh" type="button">Refresh</button>
         <button id="validate-token" type="button">Check Connection</button>
         <button id="login-oidc" type="button">OIDC Login</button>
+        <button id="login-approle" type="button">AppRole Login</button>
+        <button id="search-secrets" type="button">Search Secrets</button>
         <button id="open-options" type="button">Options</button>
       </footer>
       <p id="status" role="status"></p>
+
+      <section id="search-section" hidden>
+        <h2>Search Secrets</h2>
+        <form id="search-form">
+          <input
+            id="search-query"
+            name="query"
+            type="search"
+            placeholder="Site name or origin"
+            autocomplete="off"
+          />
+          <button type="submit">Search</button>
+        </form>
+        <ul id="search-results"></ul>
+      </section>
     </main>
   </body>
 </html>

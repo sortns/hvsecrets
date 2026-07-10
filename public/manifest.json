@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "HVSecrets",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "Password-manager workflow backed by HashiCorp Vault KV.",
   "icons": {
     "16": "icons/icon-16.png",
@@ -39,7 +39,7 @@
   ],
   "browser_specific_settings": {
     "gecko": {
-      "id": "hvsecrets@example.local",
+      "id": "hvsecrets@ixsa.net",
       "data_collection_permissions": {
         "required": ["authenticationInfo", "browsingActivity"]
       },

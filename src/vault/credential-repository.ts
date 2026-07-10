@@ -108,7 +108,34 @@ export class CredentialRepository {
     originInput: string,
   ): Promise<readonly CredentialSummary[]> {
     const origin = normalizeOrigin(originInput);
-    const basePath = this.originCredentialsPath(origin);
+
+    return this.listCredentialsAtPath(this.originCredentialsPath(origin));
+  }
+
+  async searchAll(): Promise<readonly CredentialSummary[]> {
+    const rootPath = joinVaultPath(this.basePath, "credentials");
+    let originSegments: readonly string[];
+
+    try {
+      originSegments = await this.client.list(rootPath);
+    } catch {
+      return [];
+    }
+
+    const credentialLists = await Promise.all(
+      originSegments
+        .filter((segment) => segment.endsWith("/"))
+        .map((segment) =>
+          this.listCredentialsAtPath(joinVaultPath(rootPath, segment)),
+        ),
+    );
+
+    return credentialLists.flat();
+  }
+
+  private async listCredentialsAtPath(
+    basePath: string,
+  ): Promise<readonly CredentialSummary[]> {
     let keys: readonly string[];
 
     try {
@@ -121,9 +148,7 @@ export class CredentialRepository {
     const credentials = await Promise.all(
       credentialIds.map(async (id): Promise<CredentialSummary | null> => {
         try {
-          const result = await this.client.read(
-            this.credentialPath(origin, id),
-          );
+          const result = await this.client.read(joinVaultPath(basePath, id));
           assertCredentialRecord(result.data);
 
           return toSummary(id, result.data);
@@ -133,7 +158,9 @@ export class CredentialRepository {
       }),
     );
 
-    return credentials.filter((credential) => credential !== null);
+    return credentials.filter(
+      (credential): credential is CredentialSummary => credential !== null,
+    );
   }
 
   async getForOrigin(

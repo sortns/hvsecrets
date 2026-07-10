@@ -9,6 +9,7 @@ Instead, it uses content scripts, a background script, popup/options pages, and 
 - Vault KV v2 credential storage.
 - Token authentication with connection/token validation.
 - Vault OIDC login using the Vault CLI-style callback flow: `http://localhost:8250/oidc/callback`.
+- Vault AppRole login using a role ID and secret ID.
 - Exact-origin credential binding.
 - Inline credential suggestions on username/password fields.
 - Context-menu credential fill.
@@ -23,7 +24,7 @@ Instead, it uses content scripts, a background script, popup/options pages, and 
 - Node.js 20 or newer.
 - Firefox.
 - HashiCorp Vault with a KV v2 mount.
-- A Vault token or Vault OIDC role that can access the configured path.
+- A Vault token, Vault OIDC role, or Vault AppRole role that can access the configured path.
 
 ## Install Dependencies
 
@@ -120,11 +121,13 @@ The extension Options page needs:
 - KV mount.
 - Base secret path.
 - Optional Vault namespace.
-- Auth mode: Token or OIDC.
+- Auth mode: Token, OIDC, or AppRole.
 
 Token mode stores the Vault token in extension local storage for development use.
 
 OIDC mode opens the provider login in a tab, watches for the Vault CLI-style localhost callback, then completes Vault's OIDC callback API from the background script.
+
+AppRole mode stores the role ID and secret ID in extension local storage and calls Vault's `auth/<mount>/login` API from the background script to obtain a client token. Use `secret_id_num_uses`/`secret_id_ttl` on the AppRole role to control how long a stored secret ID stays valid.
 
 ## Credential Layout
 

@@ -27,6 +27,31 @@ describe("background config storage", () => {
     expect(config.hasToken).toBe(false);
   });
 
+  it("keeps a config saved before AppRole support instead of resetting it to defaults", async () => {
+    const storage = createMemoryStorage({
+      [configStorageKey]: {
+        vaultUrl: "https://vault.example",
+        kvMount: "secret",
+        basePath: "hvsecrets",
+        authMode: "oidc",
+        oidcAuthMount: "oidc",
+        oidcRole: "hvsecrets",
+        vaultNamespace: "",
+      },
+      [secretsStorageKey]: {
+        vaultToken: "old-token",
+      },
+    });
+
+    const config = await getConfig(storage);
+
+    expect(config.vaultUrl).toBe("https://vault.example");
+    expect(config.authMode).toBe("oidc");
+    expect(config.hasToken).toBe(true);
+    expect(config.approleAuthMount).toBe(defaultConfig.approleAuthMount);
+    expect(config.approleRoleId).toBe(defaultConfig.approleRoleId);
+  });
+
   it("saves normalized config and token presence separately", async () => {
     const storage = createMemoryStorage();
     const config = await saveConfig(storage, {

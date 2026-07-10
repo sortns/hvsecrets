@@ -10,8 +10,14 @@ const credentialListElement = getElement("credential-list");
 const statusElement = getElement("status") as HTMLParagraphElement;
 const validateButton = getElement("validate-token") as HTMLButtonElement;
 const oidcLoginButton = getElement("login-oidc") as HTMLButtonElement;
+const approleLoginButton = getElement("login-approle") as HTMLButtonElement;
 const refreshButton = getElement("refresh") as HTMLButtonElement;
 const openOptionsButton = getElement("open-options") as HTMLButtonElement;
+const searchSecretsButton = getElement("search-secrets") as HTMLButtonElement;
+const searchSection = getElement("search-section");
+const searchForm = getElement("search-form") as HTMLFormElement;
+const searchQueryInput = getElement("search-query") as HTMLInputElement;
+const searchResultsElement = getElement("search-results");
 
 void loadState();
 
@@ -21,11 +27,25 @@ validateButton.addEventListener("click", () => {
 oidcLoginButton.addEventListener("click", () => {
   void loginWithOidc();
 });
+approleLoginButton.addEventListener("click", () => {
+  void loginWithApprole();
+});
 refreshButton.addEventListener("click", () => {
   void refreshCredentialState();
 });
 openOptionsButton.addEventListener("click", () => {
   void browser.runtime.openOptionsPage();
+});
+searchSecretsButton.addEventListener("click", () => {
+  searchSection.hidden = !searchSection.hidden;
+
+  if (!searchSection.hidden) {
+    void runSearch(searchQueryInput.value);
+  }
+});
+searchForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+  void runSearch(searchQueryInput.value);
 });
 
 async function loadState(): Promise<void> {
@@ -40,6 +60,7 @@ async function loadState(): Promise<void> {
   vaultPathElement.textContent = `${response.config.kvMount}/${response.config.basePath}`;
   authStateElement.textContent = authStateText(response.config);
   oidcLoginButton.hidden = response.config.authMode !== "oidc";
+  approleLoginButton.hidden = response.config.authMode !== "approle";
   setStatus(
     response.validation.ok ? "Ready" : response.validation.errors.join(". "),
   );
@@ -127,6 +148,23 @@ async function loginWithOidc(): Promise<void> {
   await loadState();
 }
 
+async function loginWithApprole(): Promise<void> {
+  setStatus("Starting AppRole login");
+  const response = await sendRuntimeRequest({ type: "auth.loginApprole" });
+
+  if (response.type !== "auth.approleLoginResult") {
+    setStatus("Unable to start AppRole login");
+    return;
+  }
+
+  setStatus(
+    response.ok
+      ? "AppRole login succeeded"
+      : (response.error ?? "AppRole login failed"),
+  );
+  await loadState();
+}
+
 function renderCredentials(credentials: readonly CredentialSummary[]): void {
   credentialListElement.textContent = "";
 
@@ -141,6 +179,7 @@ function renderCredentials(credentials: readonly CredentialSummary[]): void {
     const item = document.createElement("li");
     const username = document.createElement("span");
     const fillButton = document.createElement("button");
+    const { secret, button: revealButton } = createRevealElements(credential);
 
     username.textContent = credential.username;
     fillButton.type = "button";
@@ -149,9 +188,107 @@ function renderCredentials(credentials: readonly CredentialSummary[]): void {
       void fillCredential(credential.id);
     });
 
-    item.append(username, fillButton);
+    item.append(username, secret, revealButton, fillButton);
     credentialListElement.append(item);
   }
+}
+
+async function runSearch(query: string): Promise<void> {
+  setStatus("Searching credentials");
+  const response = await sendRuntimeRequest({
+    type: "credentials.search",
+    query,
+  });
+
+  if (response.type !== "credentials.searchResult") {
+    setStatus("Unable to search credentials");
+    return;
+  }
+
+  renderSearchResults(response.credentials);
+  setStatus(
+    response.error ??
+      `Found ${String(response.credentials.length)} credential(s)`,
+  );
+}
+
+function renderSearchResults(credentials: readonly CredentialSummary[]): void {
+  searchResultsElement.textContent = "";
+
+  if (credentials.length === 0) {
+    const item = document.createElement("li");
+    item.textContent = "No matching credentials";
+    searchResultsElement.append(item);
+    return;
+  }
+
+  for (const credential of credentials) {
+    const item = document.createElement("li");
+    const origin = document.createElement("span");
+    const username = document.createElement("span");
+    const { secret, button: revealButton } = createRevealElements(credential);
+
+    origin.className = "credential-origin";
+    origin.textContent = credential.origin;
+    username.textContent = credential.username;
+
+    item.append(origin, username, secret, revealButton);
+    searchResultsElement.append(item);
+  }
+}
+
+function createRevealElements(credential: CredentialSummary): {
+  readonly secret: HTMLSpanElement;
+  readonly button: HTMLButtonElement;
+} {
+  const secret = document.createElement("span");
+  secret.className = "credential-secret";
+  secret.hidden = true;
+
+  const button = document.createElement("button");
+  button.type = "button";
+  button.textContent = "Reveal";
+
+  let cachedPassword: string | null = null;
+
+  button.addEventListener("click", () => {
+    void (async () => {
+      if (!secret.hidden) {
+        secret.hidden = true;
+        secret.textContent = "";
+        button.textContent = "Reveal";
+        return;
+      }
+
+      if (cachedPassword === null) {
+        button.disabled = true;
+        const response = await sendRuntimeRequest({
+          type: "credentials.reveal",
+          origin: credential.origin,
+          credentialId: credential.id,
+        });
+        button.disabled = false;
+
+        if (response.type !== "credentials.revealResult" || !response.ok) {
+          setStatus(
+            response.type === "credentials.revealResult" &&
+              response.error !== undefined
+              ? response.error
+              : "Unable to reveal password",
+          );
+          return;
+        }
+
+        cachedPassword = response.password ?? "";
+      }
+
+      secret.textContent = cachedPassword;
+      secret.hidden = false;
+      button.textContent = "Hide";
+    })();
+  });
+
+  return { secret, button };
 }
 
 function authStateText(config: ExtensionConfig): string {
@@ -159,21 +296,23 @@ function authStateText(config: ExtensionConfig): string {
     return config.hasToken ? "Token configured" : "Token auth";
   }
 
+  const label = config.authMode === "approle" ? "AppRole" : "OIDC";
+
   if (!config.hasToken) {
-    return "OIDC login required";
+    return `${label} login required`;
   }
 
   if (config.tokenExpiresAt === null) {
-    return "OIDC token configured";
+    return `${label} token configured`;
   }
 
   const expiresAt = Date.parse(config.tokenExpiresAt);
 
   if (Number.isFinite(expiresAt) && expiresAt <= Date.now()) {
-    return "OIDC token expired";
+    return `${label} token expired`;
   }
 
-  return `OIDC token until ${new Date(config.tokenExpiresAt).toLocaleString()}`;
+  return `${label} token until ${new Date(config.tokenExpiresAt).toLocaleString()}`;
 }
 
 async function sendRuntimeRequest(

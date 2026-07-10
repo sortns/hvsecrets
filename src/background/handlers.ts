@@ -3,7 +3,9 @@ import type { RuntimeRequest, RuntimeResponse } from "../shared/messages";
 import type { CapturedCredentialInput } from "../shared/pending-credential";
 import { normalizeOrigin } from "../shared/origin";
 import { nowIsoString } from "../shared/clock";
+import { VaultAppRoleClient } from "../vault/approle-client";
 import { CredentialRepository } from "../vault/credential-repository";
+import { VaultClientError } from "../vault/errors";
 import { VaultKvV2Client } from "../vault/kv-v2-client";
 import { VaultOidcClient } from "../vault/oidc-client";
 import {
@@ -65,6 +67,8 @@ export async function handleRuntimeRequest(
       return validateToken(storage);
     case "auth.loginOidc":
       return loginOidc(storage, oidcTabFlow);
+    case "auth.loginApprole":
+      return loginApprole(storage);
     case "settings.ignoredOrigins.list":
       return getIgnoredOrigins(storage);
     case "settings.ignoredOrigins.add":
@@ -109,6 +113,10 @@ export async function handleRuntimeRequest(
       return dismissPendingCredentialForSenderOrigin(storage, sender);
     case "credentials.ignoreSenderOrigin":
       return ignoreSenderOrigin(storage, sender);
+    case "credentials.search":
+      return searchCredentials(storage, request.query);
+    case "credentials.reveal":
+      return revealCredential(storage, request.origin, request.credentialId);
   }
 }
 
@@ -252,6 +260,64 @@ async function loginOidc(
   }
 }
 
+async function loginApprole(
+  storage: ExtensionStorageArea,
+): Promise<RuntimeResponse> {
+  const config = await getConfig(storage);
+  const secrets = await getSecrets(storage);
+
+  if (config.approleRoleId.trim().length === 0) {
+    return {
+      type: "auth.approleLoginResult",
+      ok: false,
+      error: "AppRole role ID is required",
+    };
+  }
+
+  const secretId = secrets.approleSecretId?.trim();
+
+  if (secretId === undefined || secretId.length === 0) {
+    return {
+      type: "auth.approleLoginResult",
+      ok: false,
+      error: "AppRole secret ID is required",
+    };
+  }
+
+  try {
+    const client = new VaultAppRoleClient({
+      vaultUrl: config.vaultUrl,
+      authMount: config.approleAuthMount,
+      namespace: config.vaultNamespace,
+    });
+    const result = await client.login({
+      roleId: config.approleRoleId,
+      secretId,
+    });
+
+    await saveVaultToken(storage, {
+      token: result.clientToken,
+      leaseDuration: result.leaseDuration,
+      renewable: result.renewable,
+    });
+
+    const updatedConfig = await getConfig(storage);
+
+    return {
+      type: "auth.approleLoginResult",
+      ok: true,
+      tokenExpiresAt: updatedConfig.tokenExpiresAt,
+      renewable: updatedConfig.tokenRenewable,
+    };
+  } catch (error) {
+    return {
+      type: "auth.approleLoginResult",
+      ok: false,
+      error: error instanceof Error ? error.message : "AppRole login failed",
+    };
+  }
+}
+
 async function listCredentialsForCurrentTab(
   storage: ExtensionStorageArea,
   tabs: ExtensionTabsApi,
@@ -301,6 +367,69 @@ async function listCredentialsForSenderOrigin(
   };
 }
 
+async function searchCredentials(
+  storage: ExtensionStorageArea,
+  query: string,
+): Promise<RuntimeResponse> {
+  try {
+    const repository = await createCredentialRepository(storage);
+    const allCredentials = await repository.searchAll();
+    const normalizedQuery = query.trim().toLowerCase();
+    const credentials =
+      normalizedQuery.length === 0
+        ? allCredentials
+        : allCredentials.filter(
+            (credential) =>
+              credential.origin.toLowerCase().includes(normalizedQuery) ||
+              credential.url.toLowerCase().includes(normalizedQuery) ||
+              credential.title.toLowerCase().includes(normalizedQuery) ||
+              credential.username.toLowerCase().includes(normalizedQuery),
+          );
+
+    return {
+      type: "credentials.searchResult",
+      credentials,
+    };
+  } catch (error) {
+    return {
+      type: "credentials.searchResult",
+      credentials: [],
+      error: error instanceof Error ? error.message : "Credential search failed",
+    };
+  }
+}
+
+async function revealCredential(
+  storage: ExtensionStorageArea,
+  origin: string,
+  credentialId: string,
+): Promise<RuntimeResponse> {
+  try {
+    const repository = await createCredentialRepository(storage);
+    const credential = await repository.getForOrigin(origin, credentialId);
+
+    if (credential === null) {
+      return {
+        type: "credentials.revealResult",
+        ok: false,
+        error: "Credential was not found",
+      };
+    }
+
+    return {
+      type: "credentials.revealResult",
+      ok: true,
+      password: credential.password,
+    };
+  } catch (error) {
+    return {
+      type: "credentials.revealResult",
+      ok: false,
+      error: error instanceof Error ? error.message : "Credential reveal failed",
+    };
+  }
+}
+
 async function saveCredentialForCurrentTab(
   storage: ExtensionStorageArea,
   tabs: ExtensionTabsApi,
@@ -345,7 +474,7 @@ async function saveCredentialForCurrentTab(
     return {
       type: "credentials.saveResult",
       ok: false,
-      error: error instanceof Error ? error.message : "Credential save failed",
+      error: describeCredentialSaveError(error),
     };
   }
 }
@@ -656,22 +785,30 @@ async function savePendingCredentialForCurrentTab(
     };
   }
 
-  const repository = await createCredentialRepository(storage);
-  const credential = await repository.saveOrUpdate({
-    origin,
-    username: pendingCredential.username,
-    password: pendingCredential.password,
-    url: pendingCredential.url,
-    title: pendingCredential.title,
-  });
+  try {
+    const repository = await createCredentialRepository(storage);
+    const credential = await repository.saveOrUpdate({
+      origin,
+      username: pendingCredential.username,
+      password: pendingCredential.password,
+      url: pendingCredential.url,
+      title: pendingCredential.title,
+    });
 
-  await deletePendingCredential(storage, origin);
+    await deletePendingCredential(storage, origin);
 
-  return {
-    type: "credentials.saveResult",
-    ok: true,
-    credential,
-  };
+    return {
+      type: "credentials.saveResult",
+      ok: true,
+      credential,
+    };
+  } catch (error) {
+    return {
+      type: "credentials.saveResult",
+      ok: false,
+      error: describeCredentialSaveError(error),
+    };
+  }
 }
 
 async function savePendingCredentialForSenderOrigin(
@@ -698,22 +835,41 @@ async function savePendingCredentialForSenderOrigin(
     };
   }
 
-  const repository = await createCredentialRepository(storage);
-  const credential = await repository.saveOrUpdate({
-    origin,
-    username: pendingCredential.username,
-    password: pendingCredential.password,
-    url: pendingCredential.url,
-    title: pendingCredential.title,
-  });
+  try {
+    const repository = await createCredentialRepository(storage);
+    const credential = await repository.saveOrUpdate({
+      origin,
+      username: pendingCredential.username,
+      password: pendingCredential.password,
+      url: pendingCredential.url,
+      title: pendingCredential.title,
+    });
 
-  await deletePendingCredential(storage, origin);
+    await deletePendingCredential(storage, origin);
 
-  return {
-    type: "credentials.saveResult",
-    ok: true,
-    credential,
-  };
+    return {
+      type: "credentials.saveResult",
+      ok: true,
+      credential,
+    };
+  } catch (error) {
+    return {
+      type: "credentials.saveResult",
+      ok: false,
+      error: describeCredentialSaveError(error),
+    };
+  }
+}
+
+function describeCredentialSaveError(error: unknown): string {
+  if (
+    error instanceof VaultClientError &&
+    (error.status === 401 || error.status === 403)
+  ) {
+    return "Vault session expired. Please log in again.";
+  }
+
+  return error instanceof Error ? error.message : "Credential save failed";
 }
 
 async function dismissPendingCredentialForCurrentTab(

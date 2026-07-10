@@ -81,6 +81,44 @@ section {
   gap: 10px;
 }
 
+section[hidden] {
+  display: none;
+}
+
+#search-form {
+  display: flex;
+  gap: 8px;
+}
+
+#search-form input {
+  background: var(--field);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--foreground);
+  flex: 1;
+  font: inherit;
+  padding: 8px 10px;
+}
+
+#search-results li {
+  align-items: baseline;
+  border-top: 1px solid var(--border);
+  flex-wrap: wrap;
+  padding-top: 8px;
+}
+
+#search-results .credential-origin {
+  color: var(--muted);
+  flex-basis: 100%;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+#search-results .credential-secret {
+  flex: 1;
+  overflow-wrap: anywhere;
+}
+
 ul {
   display: grid;
   gap: 8px;
