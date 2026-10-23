@@ -17,6 +17,10 @@ Instead, it uses content scripts, a background script, popup/options pages, and 
 - Duplicate prevention by `origin + username`.
 - Same username with changed password updates the existing Vault entry.
 - Ignored origins for save prompts, manageable from Options.
+- Popup with three tabs: current site's logins, cross-site search, and a password generator.
+- Per-login actions: fill, copy password, show/hide password, delete (with confirmation; removes all versions from Vault).
+- Fast search: the credential index (summaries only, no passwords) is loaded with bounded parallel Vault requests, cached in background memory for 2 minutes, and filtered locally while typing.
+- Password generator (crypto-random, unbiased) with length and character-type options; copies or fills the new-password fields on the page, after which the normal save prompt stores the login.
 - Light/dark theme support for popup, options, and injected prompts.
 
 ## Requirements

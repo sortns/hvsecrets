@@ -89,9 +89,9 @@ describe("runtime message validation", () => {
   });
 
   it("validates credential search and reveal messages", () => {
-    expect(
-      isRuntimeRequest({ type: "credentials.search", query: "" }),
-    ).toBe(true);
+    expect(isRuntimeRequest({ type: "credentials.search", query: "" })).toBe(
+      true,
+    );
     expect(
       isRuntimeRequest({ type: "credentials.search", query: "example" }),
     ).toBe(true);
@@ -138,6 +138,41 @@ describe("runtime message validation", () => {
           username: "alice",
           password: "x".repeat(4097),
         },
+      }),
+    ).toBe(false);
+  });
+  it("validates delete and generated-password fill messages", () => {
+    expect(
+      isRuntimeRequest({
+        type: "credentials.delete",
+        origin: "https://example.com",
+        credentialId: "11111111-1111-1111-1111-111111111111",
+      }),
+    ).toBe(true);
+    expect(
+      isRuntimeRequest({
+        type: "credentials.delete",
+        origin: "https://example.com",
+        credentialId: "../../other",
+      }),
+    ).toBe(false);
+    expect(
+      isRuntimeRequest({
+        type: "credentials.fillGeneratedPassword",
+        password: "Gen3rated!",
+      }),
+    ).toBe(true);
+    expect(
+      isRuntimeRequest({
+        type: "credentials.fillGeneratedPassword",
+        password: "",
+      }),
+    ).toBe(false);
+    expect(
+      isRuntimeRequest({
+        type: "credentials.search",
+        query: "",
+        refresh: "yes",
       }),
     ).toBe(false);
   });

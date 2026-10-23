@@ -3,8 +3,15 @@ import type { RuntimeRequest, RuntimeResponse } from "../shared/messages";
 import type { CapturedCredentialInput } from "../shared/pending-credential";
 import { normalizeOrigin } from "../shared/origin";
 import { nowIsoString } from "../shared/clock";
+import {
+  getCredentialIndex,
+  invalidateCredentialIndex,
+} from "./credential-index";
 import { VaultAppRoleClient } from "../vault/approle-client";
-import { CredentialRepository } from "../vault/credential-repository";
+import {
+  CredentialRepository,
+  type CredentialSummary,
+} from "../vault/credential-repository";
 import { VaultClientError } from "../vault/errors";
 import { VaultKvV2Client } from "../vault/kv-v2-client";
 import { VaultOidcClient } from "../vault/oidc-client";
@@ -114,7 +121,15 @@ export async function handleRuntimeRequest(
     case "credentials.ignoreSenderOrigin":
       return ignoreSenderOrigin(storage, sender);
     case "credentials.search":
-      return searchCredentials(storage, request.query);
+      return searchCredentials(
+        storage,
+        request.query,
+        request.refresh === true,
+      );
+    case "credentials.delete":
+      return deleteCredential(storage, request.origin, request.credentialId);
+    case "credentials.fillGeneratedPassword":
+      return fillGeneratedPassword(tabs, request.password);
     case "credentials.reveal":
       return revealCredential(storage, request.origin, request.credentialId);
   }
@@ -334,13 +349,22 @@ async function listCredentialsForCurrentTab(
     };
   }
 
-  const repository = await createCredentialRepository(storage);
+  try {
+    const repository = await createCredentialRepository(storage);
 
-  return {
-    type: "credentials.list",
-    origin,
-    credentials: await repository.listForOrigin(origin),
-  };
+    return {
+      type: "credentials.list",
+      origin,
+      credentials: await repository.listForOrigin(origin),
+    };
+  } catch (error) {
+    return {
+      type: "credentials.list",
+      origin,
+      credentials: [],
+      error: describeVaultError(error, "Unable to load credentials"),
+    };
+  }
 }
 
 async function listCredentialsForSenderOrigin(
@@ -358,22 +382,37 @@ async function listCredentialsForSenderOrigin(
     };
   }
 
-  const repository = await createCredentialRepository(storage);
+  try {
+    const repository = await createCredentialRepository(storage);
 
-  return {
-    type: "credentials.list",
-    origin,
-    credentials: await repository.listForOrigin(origin),
-  };
+    return {
+      type: "credentials.list",
+      origin,
+      credentials: await repository.listForOrigin(origin),
+    };
+  } catch (error) {
+    return {
+      type: "credentials.list",
+      origin,
+      credentials: [],
+      error: describeVaultError(error, "Unable to load credentials"),
+    };
+  }
 }
 
 async function searchCredentials(
   storage: ExtensionStorageArea,
   query: string,
+  refresh: boolean,
 ): Promise<RuntimeResponse> {
   try {
-    const repository = await createCredentialRepository(storage);
-    const allCredentials = await repository.searchAll();
+    const { repository, cacheKey } =
+      await createCredentialRepositoryWithKey(storage);
+    const allCredentials = await getCredentialIndex(
+      cacheKey,
+      () => repository.searchAll(),
+      { refresh },
+    );
     const normalizedQuery = query.trim().toLowerCase();
     const credentials =
       normalizedQuery.length === 0
@@ -394,7 +433,8 @@ async function searchCredentials(
     return {
       type: "credentials.searchResult",
       credentials: [],
-      error: error instanceof Error ? error.message : "Credential search failed",
+      error:
+        error instanceof Error ? error.message : "Credential search failed",
     };
   }
 }
@@ -425,9 +465,78 @@ async function revealCredential(
     return {
       type: "credentials.revealResult",
       ok: false,
-      error: error instanceof Error ? error.message : "Credential reveal failed",
+      error:
+        error instanceof Error ? error.message : "Credential reveal failed",
     };
   }
+}
+
+async function deleteCredential(
+  storage: ExtensionStorageArea,
+  origin: string,
+  credentialId: string,
+): Promise<RuntimeResponse> {
+  try {
+    const repository = await createCredentialRepository(storage);
+    const deleted = await repository.delete(origin, credentialId);
+    invalidateCredentialIndex();
+
+    return deleted
+      ? { type: "credentials.deleteResult", ok: true }
+      : {
+          type: "credentials.deleteResult",
+          ok: false,
+          error: "Credential was not found",
+        };
+  } catch (error) {
+    return {
+      type: "credentials.deleteResult",
+      ok: false,
+      error: describeVaultError(error, "Credential delete failed"),
+    };
+  }
+}
+
+async function fillGeneratedPassword(
+  tabs: ExtensionTabsApi,
+  password: string,
+): Promise<RuntimeResponse> {
+  const currentTab = await getCurrentTab(tabs);
+
+  if (getTabOrigin(currentTab) === null || currentTab.id === undefined) {
+    return {
+      type: "credentials.fillResult",
+      ok: false,
+      error: "Current tab does not have a fillable URL",
+    };
+  }
+
+  try {
+    const result = await tabs.sendMessage(currentTab.id, {
+      type: "content.fillPassword",
+      password,
+    });
+
+    return isFillResult(result)
+      ? { type: "credentials.fillResult", ...result }
+      : { type: "credentials.fillResult", ok: true };
+  } catch (error) {
+    return {
+      type: "credentials.fillResult",
+      ok: false,
+      error: error instanceof Error ? error.message : "Password fill failed",
+    };
+  }
+}
+
+function isFillResult(
+  value: unknown,
+): value is { readonly ok: boolean; readonly error?: string } {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    typeof (value as { ok?: unknown }).ok === "boolean"
+  );
 }
 
 async function saveCredentialForCurrentTab(
@@ -464,6 +573,7 @@ async function saveCredentialForCurrentTab(
       url: currentTab.url,
       title: currentTab.title ?? "",
     });
+    invalidateCredentialIndex();
 
     return {
       type: "credentials.saveResult",
@@ -474,7 +584,7 @@ async function saveCredentialForCurrentTab(
     return {
       type: "credentials.saveResult",
       ok: false,
-      error: describeCredentialSaveError(error),
+      error: describeVaultError(error, "Credential save failed"),
     };
   }
 }
@@ -495,8 +605,18 @@ async function fillCredentialForCurrentTab(
     };
   }
 
-  const repository = await createCredentialRepository(storage);
-  const credential = await repository.getForOrigin(origin, credentialId);
+  let credential: Awaited<ReturnType<CredentialRepository["getForOrigin"]>>;
+
+  try {
+    const repository = await createCredentialRepository(storage);
+    credential = await repository.getForOrigin(origin, credentialId);
+  } catch (error) {
+    return {
+      type: "credentials.fillResult",
+      ok: false,
+      error: describeVaultError(error, "Credential fill failed"),
+    };
+  }
 
   if (credential === null) {
     return {
@@ -543,8 +663,18 @@ async function fillFirstCredentialForCurrentTab(
     };
   }
 
-  const repository = await createCredentialRepository(storage);
-  const credentials = await repository.listForOrigin(origin);
+  let credentials: readonly CredentialSummary[];
+
+  try {
+    const repository = await createCredentialRepository(storage);
+    credentials = await repository.listForOrigin(origin);
+  } catch (error) {
+    return {
+      type: "credentials.fillResult",
+      ok: false,
+      error: describeVaultError(error, "Credential fill failed"),
+    };
+  }
 
   if (credentials.length === 0) {
     return {
@@ -576,8 +706,18 @@ async function fillCredentialForSenderOrigin(
     };
   }
 
-  const repository = await createCredentialRepository(storage);
-  const credential = await repository.getForOrigin(origin, credentialId);
+  let credential: Awaited<ReturnType<CredentialRepository["getForOrigin"]>>;
+
+  try {
+    const repository = await createCredentialRepository(storage);
+    credential = await repository.getForOrigin(origin, credentialId);
+  } catch (error) {
+    return {
+      type: "credentials.fillResult",
+      ok: false,
+      error: describeVaultError(error, "Credential fill failed"),
+    };
+  }
 
   if (credential === null) {
     return {
@@ -644,7 +784,6 @@ async function captureLoginAttempt(
     };
   }
 
-  const repository = await createCredentialRepository(storage);
   const normalizedCredential = {
     origin,
     url: credential.url,
@@ -653,7 +792,7 @@ async function captureLoginAttempt(
     password: credential.password,
   };
 
-  if (await repository.hasExactCredential(normalizedCredential)) {
+  if (await isAlreadySaved(storage, normalizedCredential)) {
     await deletePendingCredential(storage, origin);
 
     return {
@@ -671,6 +810,22 @@ async function captureLoginAttempt(
     type: "credentials.captureResult",
     ok: true,
   };
+}
+
+// When Vault can't be asked (no token, expired session) keep the capture:
+// the "Save login?" prompt then reports the session problem on save
+// instead of the password being silently dropped.
+async function isAlreadySaved(
+  storage: ExtensionStorageArea,
+  credential: Parameters<CredentialRepository["hasExactCredential"]>[0],
+): Promise<boolean> {
+  try {
+    const repository = await createCredentialRepository(storage);
+
+    return await repository.hasExactCredential(credential);
+  } catch {
+    return false;
+  }
 }
 
 async function getIgnoredOrigins(
@@ -794,6 +949,7 @@ async function savePendingCredentialForCurrentTab(
       url: pendingCredential.url,
       title: pendingCredential.title,
     });
+    invalidateCredentialIndex();
 
     await deletePendingCredential(storage, origin);
 
@@ -806,7 +962,7 @@ async function savePendingCredentialForCurrentTab(
     return {
       type: "credentials.saveResult",
       ok: false,
-      error: describeCredentialSaveError(error),
+      error: describeVaultError(error, "Credential save failed"),
     };
   }
 }
@@ -844,6 +1000,7 @@ async function savePendingCredentialForSenderOrigin(
       url: pendingCredential.url,
       title: pendingCredential.title,
     });
+    invalidateCredentialIndex();
 
     await deletePendingCredential(storage, origin);
 
@@ -856,12 +1013,12 @@ async function savePendingCredentialForSenderOrigin(
     return {
       type: "credentials.saveResult",
       ok: false,
-      error: describeCredentialSaveError(error),
+      error: describeVaultError(error, "Credential save failed"),
     };
   }
 }
 
-function describeCredentialSaveError(error: unknown): string {
+function describeVaultError(error: unknown, fallback: string): string {
   if (
     error instanceof VaultClientError &&
     (error.status === 401 || error.status === 403)
@@ -869,7 +1026,7 @@ function describeCredentialSaveError(error: unknown): string {
     return "Vault session expired. Please log in again.";
   }
 
-  return error instanceof Error ? error.message : "Credential save failed";
+  return error instanceof Error ? error.message : fallback;
 }
 
 async function dismissPendingCredentialForCurrentTab(
@@ -924,6 +1081,15 @@ async function ignoreSenderOrigin(
 async function createCredentialRepository(
   storage: ExtensionStorageArea,
 ): Promise<CredentialRepository> {
+  return (await createCredentialRepositoryWithKey(storage)).repository;
+}
+
+async function createCredentialRepositoryWithKey(
+  storage: ExtensionStorageArea,
+): Promise<{
+  readonly repository: CredentialRepository;
+  readonly cacheKey: string;
+}> {
   const config = await getConfig(storage);
   const secrets = await getSecrets(storage);
 
@@ -934,15 +1100,26 @@ async function createCredentialRepository(
     throw new Error("Vault token is not configured");
   }
 
-  return new CredentialRepository(
-    new VaultKvV2Client({
-      vaultUrl: config.vaultUrl,
-      token: secrets.vaultToken,
-      mount: config.kvMount,
-      namespace: config.vaultNamespace,
-    }),
-    config.basePath,
-  );
+  return {
+    repository: new CredentialRepository(
+      new VaultKvV2Client({
+        vaultUrl: config.vaultUrl,
+        token: secrets.vaultToken,
+        mount: config.kvMount,
+        namespace: config.vaultNamespace,
+      }),
+      config.basePath,
+    ),
+    // Background memory only; ties cached search results to this exact
+    // Vault target and session.
+    cacheKey: [
+      config.vaultUrl,
+      config.vaultNamespace,
+      config.kvMount,
+      config.basePath,
+      secrets.vaultToken,
+    ].join("\n"),
+  };
 }
 
 async function getCurrentTab(tabs: ExtensionTabsApi): Promise<ExtensionTab> {

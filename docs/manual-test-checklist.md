@@ -32,6 +32,17 @@ Use this checklist before sharing a local build.
 - Repeating login with the same username and changed password updates the existing Vault entry.
 - Existing credentials for `http`, `https`, and subdomains remain separate.
 
+## Popup (0.0.4)
+
+- Popup opens and stays open on a site with saved logins while the Vault token is valid (the 0.0.2/0.0.3 "opens and immediately closes" bug).
+- Popup keeps the same size when switching tabs and when search results load.
+- `Show` reveals the password inline, `Hide` clears it; `Copy` puts the password on the clipboard.
+- `Delete` asks for confirmation; `Cancel`/`Escape` returns to the row; confirming removes the login from the list and from Search.
+- Search loads once, then filters instantly while typing; the reload button fetches fresh data from Vault.
+- With an expired token the popup shows an expired badge and "Vault session expired" instead of "no saved logins".
+- Generator: changing length/character types regenerates; the last character type can't be unchecked; options persist between popup openings.
+- `Fill on page` fills password + confirmation on a sign-up form, the focused field on an unhinted change-password form, and asks to focus a field when the target is ambiguous.
+
 ## Regression Checks
 
 - Popup no longer shows manual save or captured-login controls.

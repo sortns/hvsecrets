@@ -139,6 +139,10 @@ export class VaultKvV2Client {
     await this.request("DELETE", this.kvDataApiPath(path));
   }
 
+  async deleteMetadata(path: string): Promise<void> {
+    await this.request("DELETE", this.kvMetadataApiPath(path));
+  }
+
   dataPath(path: string): string {
     return joinVaultPath(this.mount, "data", path);
   }

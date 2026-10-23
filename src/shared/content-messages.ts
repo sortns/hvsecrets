@@ -39,3 +39,24 @@ export function isFillCredentialMessage(
 function isBoundedString(value: unknown, maxLength: number): value is string {
   return typeof value === "string" && value.length <= maxLength;
 }
+
+export interface FillPasswordMessage {
+  readonly type: "content.fillPassword";
+  readonly password: string;
+}
+
+export function isFillPasswordMessage(
+  value: unknown,
+): value is FillPasswordMessage {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return false;
+  }
+
+  const message = value as Record<string, unknown>;
+
+  return (
+    message.type === "content.fillPassword" &&
+    isBoundedString(message.password, maxPasswordLength) &&
+    message.password.length > 0
+  );
+}

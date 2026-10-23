@@ -1,9 +1,10 @@
-import { findLoginFormFields } from "./forms";
+import { findLoginFormFields, findNewPasswordInputs } from "./forms";
 import type { RuntimeRequest, RuntimeResponse } from "../shared/messages";
 import type { CredentialSummary } from "../vault/credential-repository";
 import type { PendingCredential } from "../shared/pending-credential";
 import {
   isFillCredentialMessage,
+  isFillPasswordMessage,
   type FillCredentialMessage,
 } from "../shared/content-messages";
 
@@ -18,11 +19,15 @@ attachFormListeners();
 void renderPendingSavePrompt();
 
 browser.runtime.onMessage.addListener((message: unknown) => {
-  if (!isFillCredentialMessage(message)) {
-    return Promise.resolve(undefined);
+  if (isFillCredentialMessage(message)) {
+    return Promise.resolve(fillCredential(message.credential));
   }
 
-  return Promise.resolve(fillCredential(message.credential));
+  if (isFillPasswordMessage(message)) {
+    return Promise.resolve(fillGeneratedPassword(message.password));
+  }
+
+  return Promise.resolve(undefined);
 });
 
 function attachFormListeners(): void {
@@ -117,6 +122,28 @@ function fillCredential(credential: FillCredentialMessage["credential"]): {
 
   setInputValue(fields.username, credential.username);
   setInputValue(fields.password, credential.password);
+  hideCredentialMenu();
+
+  return { ok: true };
+}
+
+function fillGeneratedPassword(password: string): {
+  ok: boolean;
+  error?: string;
+} {
+  const inputs = findNewPasswordInputs();
+
+  if (inputs.length === 0) {
+    return {
+      ok: false,
+      error: "Click the new password field on the page, then try again",
+    };
+  }
+
+  for (const input of inputs) {
+    setInputValue(input, password);
+  }
+
   hideCredentialMenu();
 
   return { ok: true };

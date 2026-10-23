@@ -27,6 +27,14 @@
 - The manifest keeps only currently used extension permissions: `storage`, `contextMenus`, and `tabs`.
 - The broad host permission should be revisited before a public release if per-site enablement becomes acceptable.
 
+## Popup Data Handling
+
+- Search uses a background-memory index of credential summaries (origin, username, title, URL; never passwords). It is keyed by Vault URL, namespace, mount, base path and token, expires after 2 minutes, and is dropped on every save or delete.
+- Passwords reach the popup only on an explicit `Copy`/`Show` click and are not persisted there.
+- Delete removes the KV v2 metadata (all versions). The record is re-read first and must belong to the requested origin.
+- 401/403 from Vault is surfaced as an expired session instead of an empty credential list.
+- Generated passwords use `crypto.getRandomValues` with rejection sampling and a Fisher-Yates shuffle; generator options (not passwords) are stored in extension local storage.
+
 ## Known Development Tradeoffs
 
 - `browser.storage.local` is not an OS-backed secret store. A native helper or OS keychain integration is still recommended before wider release.

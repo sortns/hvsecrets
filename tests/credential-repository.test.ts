@@ -3,6 +3,7 @@ import {
   CredentialRepository,
   type CredentialKvClient,
 } from "../src/vault/credential-repository";
+import { VaultClientError } from "../src/vault/errors";
 
 describe("CredentialRepository", () => {
   it("saves credentials under per-origin KV v2 paths", async () => {
@@ -148,6 +149,83 @@ describe("CredentialRepository", () => {
     await expect(repository.searchAll()).resolves.toEqual([]);
   });
 
+  it("permanently deletes a credential that belongs to the origin", async () => {
+    const client = createFakeClient({
+      "hvsecrets/credentials/https.example.com/id-1": credentialRecord(
+        "https://example.com",
+        "alice",
+      ),
+    });
+    const repository = new CredentialRepository(client, "hvsecrets");
+
+    await expect(
+      repository.delete("https://example.com/login", "id-1"),
+    ).resolves.toBe(true);
+    expect(client.deletedMetadata).toEqual([
+      "hvsecrets/credentials/https.example.com/id-1",
+    ]);
+    await expect(
+      repository.listForOrigin("https://example.com"),
+    ).resolves.toEqual([]);
+  });
+
+  it("refuses to delete a credential through a different origin", async () => {
+    const client = createFakeClient({
+      "hvsecrets/credentials/https.example.com/id-1": credentialRecord(
+        "https://other.example",
+        "alice",
+      ),
+    });
+    const repository = new CredentialRepository(client, "hvsecrets");
+
+    await expect(
+      repository.delete("https://example.com", "id-1"),
+    ).resolves.toBe(false);
+    expect(client.deletedMetadata).toEqual([]);
+  });
+
+  it("surfaces an expired Vault session instead of reporting no credentials", async () => {
+    const client = createFakeClient();
+    client.list = () =>
+      Promise.reject(new VaultClientError("Vault request failed", 403));
+    const repository = new CredentialRepository(client, "hvsecrets");
+
+    await expect(
+      repository.listForOrigin("https://example.com"),
+    ).rejects.toBeInstanceOf(VaultClientError);
+    await expect(repository.searchAll()).rejects.toBeInstanceOf(
+      VaultClientError,
+    );
+  });
+
+  it("searches many origins with bounded concurrency", async () => {
+    const records: Record<string, Record<string, unknown>> = {};
+
+    for (let index = 0; index < 60; index += 1) {
+      records[
+        `hvsecrets/credentials/https.site${String(index)}.example/id-${String(index)}`
+      ] = credentialRecord(`https://site${String(index)}.example`, "alice");
+    }
+
+    const client = createFakeClient(records);
+    const read = client.read.bind(client);
+    let inFlight = 0;
+    let maxInFlight = 0;
+    client.read = async (path: string) => {
+      inFlight += 1;
+      maxInFlight = Math.max(maxInFlight, inFlight);
+      await new Promise((resolve) => setTimeout(resolve, 1));
+      inFlight -= 1;
+
+      return read(path);
+    };
+    const repository = new CredentialRepository(client, "hvsecrets");
+
+    await expect(repository.searchAll()).resolves.toHaveLength(60);
+    expect(maxInFlight).toBeGreaterThan(1);
+    expect(maxInFlight).toBeLessThanOrEqual(16);
+  });
+
   it("detects exact credentials for an origin and username", async () => {
     const client = createFakeClient({
       "hvsecrets/credentials/https.example.com/id-1": {
@@ -188,6 +266,7 @@ describe("CredentialRepository", () => {
 });
 
 interface FakeClient {
+  readonly deletedMetadata: string[];
   readonly writes: {
     readonly path: string;
     readonly data: Record<string, unknown>;
@@ -197,10 +276,20 @@ interface FakeClient {
 
 function createFakeClient(
   records: Record<string, Record<string, unknown>> = {},
-): FakeClient & CredentialKvClient {
+): FakeClient & {
+  -readonly [Key in keyof CredentialKvClient]: CredentialKvClient[Key];
+} {
   const writes: FakeClient["writes"] = [];
+  const deletedMetadata: string[] = [];
   const fakeClient = {
     writes,
+    deletedMetadata,
+    deleteMetadata(path: string) {
+      deletedMetadata.push(path);
+      Reflect.deleteProperty(records, path);
+
+      return Promise.resolve();
+    },
     write(
       path: string,
       data: Record<string, unknown>,
@@ -245,4 +334,23 @@ function createFakeClient(
   };
 
   return fakeClient;
+}
+
+function credentialRecord(
+  origin: string,
+  username: string,
+): Record<string, unknown> {
+  return {
+    schema: 1,
+    origin,
+    realm: null,
+    username,
+    password: "secret",
+    url: `${origin}/login`,
+    title: "Example",
+    created_at: "2026-05-26T00:00:00.000Z",
+    updated_at: "2026-05-26T00:00:00.000Z",
+    tags: [],
+    notes: "",
+  };
 }

@@ -7,7 +7,13 @@ import {
   type CredentialRecord,
   type NewCredentialRecordInput,
 } from "./credential";
+import { mapWithConcurrency } from "../shared/concurrency";
+import { VaultClientError } from "./errors";
 import { joinVaultPath } from "./paths";
+
+// Enough parallelism to hide round-trip latency on a large tree without
+// flooding Vault (Firefox caps HTTP/1.1 connections per host at 6 anyway).
+const vaultRequestConcurrency = 16;
 
 export interface CredentialKvClient {
   readonly write: (
@@ -20,6 +26,7 @@ export interface CredentialKvClient {
     readonly data: Record<string, unknown>;
     readonly metadata?: { readonly version?: number };
   }>;
+  readonly deleteMetadata: (path: string) => Promise<void>;
 }
 
 export interface CredentialSummary {
@@ -118,44 +125,83 @@ export class CredentialRepository {
 
     try {
       originSegments = await this.client.list(rootPath);
-    } catch {
+    } catch (error) {
+      rethrowAuthError(error);
       return [];
     }
 
-    const credentialLists = await Promise.all(
-      originSegments
-        .filter((segment) => segment.endsWith("/"))
-        .map((segment) =>
-          this.listCredentialsAtPath(joinVaultPath(rootPath, segment)),
-        ),
+    const originPaths = originSegments
+      .filter((segment) => segment.endsWith("/"))
+      .map((segment) => joinVaultPath(rootPath, segment));
+    const credentialIdsByOrigin = await mapWithConcurrency(
+      originPaths,
+      vaultRequestConcurrency,
+      async (originPath) => ({
+        originPath,
+        ids: await this.listCredentialIds(originPath),
+      }),
     );
 
-    return credentialLists.flat();
+    // Flatten before reading so one origin with many entries doesn't
+    // serialize behind its own small worker pool.
+    return this.readSummaries(
+      credentialIdsByOrigin.flatMap(({ originPath, ids }) =>
+        ids.map((id) => ({ basePath: originPath, id })),
+      ),
+    );
+  }
+
+  async delete(originInput: string, id: string): Promise<boolean> {
+    const origin = normalizeOrigin(originInput);
+    const existing = await this.getForOrigin(origin, id);
+
+    if (existing === null) {
+      return false;
+    }
+
+    // Deleting metadata removes every version, so the key also disappears
+    // from LIST and doesn't cost a dead read on every later search.
+    await this.client.deleteMetadata(this.credentialPath(origin, id));
+
+    return true;
   }
 
   private async listCredentialsAtPath(
     basePath: string,
   ): Promise<readonly CredentialSummary[]> {
-    let keys: readonly string[];
+    const ids = await this.listCredentialIds(basePath);
 
+    return this.readSummaries(ids.map((id) => ({ basePath, id })));
+  }
+
+  private async listCredentialIds(basePath: string): Promise<string[]> {
     try {
-      keys = await this.client.list(basePath);
-    } catch {
+      const keys = await this.client.list(basePath);
+
+      return keys.filter((key) => !key.endsWith("/"));
+    } catch (error) {
+      rethrowAuthError(error);
       return [];
     }
+  }
 
-    const credentialIds = keys.filter((key) => !key.endsWith("/"));
-    const credentials = await Promise.all(
-      credentialIds.map(async (id): Promise<CredentialSummary | null> => {
+  private async readSummaries(
+    entries: readonly { readonly basePath: string; readonly id: string }[],
+  ): Promise<readonly CredentialSummary[]> {
+    const credentials = await mapWithConcurrency(
+      entries,
+      vaultRequestConcurrency,
+      async ({ basePath, id }): Promise<CredentialSummary | null> => {
         try {
           const result = await this.client.read(joinVaultPath(basePath, id));
           assertCredentialRecord(result.data);
 
           return toSummary(id, result.data);
-        } catch {
+        } catch (error) {
+          rethrowAuthError(error);
           return null;
         }
-      }),
+      },
     );
 
     return credentials.filter(
@@ -178,7 +224,8 @@ export class CredentialRepository {
       }
 
       return result.data;
-    } catch {
+    } catch (error) {
+      rethrowAuthError(error);
       return null;
     }
   }
@@ -230,6 +277,17 @@ export class CredentialRepository {
     } catch {
       return null;
     }
+  }
+}
+
+// A missing or malformed entry is skipped, but an expired/denied token must
+// surface: silently returning "no credentials" hides the need to re-login.
+function rethrowAuthError(error: unknown): void {
+  if (
+    error instanceof VaultClientError &&
+    (error.status === 401 || error.status === 403)
+  ) {
+    throw error;
   }
 }
 

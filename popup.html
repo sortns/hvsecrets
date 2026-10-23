@@ -7,52 +7,180 @@
     <script type="module" src="/src/popup/index.ts"></script>
   </head>
   <body>
-    <main>
-      <h1>HVSecrets</h1>
-      <dl>
-        <div>
-          <dt>Vault</dt>
-          <dd id="vault-url">Loading</dd>
+    <div class="app">
+      <header class="app-header">
+        <div class="brand">
+          <img src="/icons/icon-32.png" alt="" width="20" height="20" />
+          <h1>HVSecrets</h1>
         </div>
-        <div>
-          <dt>Path</dt>
-          <dd id="vault-path">Loading</dd>
-        </div>
-        <div>
-          <dt>Auth</dt>
-          <dd id="auth-state">Loading</dd>
-        </div>
-      </dl>
+        <span id="auth-badge" class="badge">Loading</span>
+        <button
+          id="open-options"
+          class="icon-button"
+          type="button"
+          aria-label="Options"
+          data-tip="Options"
+        ></button>
+      </header>
+      <p id="vault-target" class="vault-target">Loading</p>
 
-      <section>
-        <h2>Credentials</h2>
-        <ul id="credential-list"></ul>
+      <nav class="tabs" role="tablist" aria-label="Sections">
+        <button
+          id="tab-site"
+          class="tab"
+          type="button"
+          role="tab"
+          aria-selected="true"
+          aria-controls="panel-site"
+        >
+          This site
+        </button>
+        <button
+          id="tab-search"
+          class="tab"
+          type="button"
+          role="tab"
+          aria-selected="false"
+          aria-controls="panel-search"
+          tabindex="-1"
+        >
+          Search
+        </button>
+        <button
+          id="tab-generator"
+          class="tab"
+          type="button"
+          role="tab"
+          aria-selected="false"
+          aria-controls="panel-generator"
+          tabindex="-1"
+        >
+          Generator
+        </button>
+      </nav>
+
+      <section
+        id="panel-site"
+        class="panel"
+        role="tabpanel"
+        aria-labelledby="tab-site"
+      >
+        <div class="panel-head">
+          <span id="site-origin" class="muted truncate"></span>
+          <button
+            id="refresh"
+            class="icon-button"
+            type="button"
+            aria-label="Refresh"
+            data-tip="Refresh"
+          ></button>
+        </div>
+        <ul id="credential-list" class="credential-list"></ul>
       </section>
 
-      <footer>
-        <button id="refresh" type="button">Refresh</button>
-        <button id="validate-token" type="button">Check Connection</button>
-        <button id="login-oidc" type="button">OIDC Login</button>
-        <button id="login-approle" type="button">AppRole Login</button>
-        <button id="search-secrets" type="button">Search Secrets</button>
-        <button id="open-options" type="button">Options</button>
-      </footer>
-      <p id="status" role="status"></p>
-
-      <section id="search-section" hidden>
-        <h2>Search Secrets</h2>
-        <form id="search-form">
+      <section
+        id="panel-search"
+        class="panel"
+        role="tabpanel"
+        aria-labelledby="tab-search"
+        hidden
+      >
+        <div class="panel-head">
           <input
             id="search-query"
-            name="query"
+            class="field"
             type="search"
-            placeholder="Site name or origin"
+            placeholder="Filter by site, username or title"
+            aria-label="Filter secrets"
             autocomplete="off"
           />
-          <button type="submit">Search</button>
-        </form>
-        <ul id="search-results"></ul>
+          <button
+            id="search-refresh"
+            class="icon-button"
+            type="button"
+            aria-label="Reload from Vault"
+            data-tip="Reload from Vault"
+          ></button>
+        </div>
+        <p id="search-summary" class="muted small"></p>
+        <ul id="search-results" class="credential-list"></ul>
       </section>
-    </main>
+
+      <section
+        id="panel-generator"
+        class="panel"
+        role="tabpanel"
+        aria-labelledby="tab-generator"
+        hidden
+      >
+        <div class="generated">
+          <input
+            id="generated-password"
+            class="field mono"
+            type="text"
+            readonly
+            spellcheck="false"
+            aria-label="Generated password"
+          />
+          <button
+            id="regenerate"
+            class="icon-button"
+            type="button"
+            aria-label="Generate another"
+            data-tip="Generate another"
+          ></button>
+        </div>
+        <div class="strength">
+          <div class="strength-bar"><span id="strength-fill"></span></div>
+          <span id="strength-label" class="muted small"></span>
+        </div>
+
+        <div class="length-row">
+          <label for="length-range">Length</label>
+          <input id="length-range" type="range" min="8" max="64" step="1" />
+          <input
+            id="length-number"
+            class="field length-number"
+            type="number"
+            min="8"
+            max="128"
+            aria-label="Password length"
+          />
+        </div>
+
+        <fieldset class="charsets">
+          <legend class="visually-hidden">Character types</legend>
+          <label><input id="opt-lowercase" type="checkbox" /> a–z</label>
+          <label><input id="opt-uppercase" type="checkbox" /> A–Z</label>
+          <label><input id="opt-digits" type="checkbox" /> 0–9</label>
+          <label><input id="opt-symbols" type="checkbox" /> !@#$%</label>
+          <label class="wide">
+            <input id="opt-ambiguous" type="checkbox" /> Avoid look-alikes (I l
+            1 O 0 o)
+          </label>
+        </fieldset>
+
+        <div class="actions">
+          <button id="copy-generated" class="primary" type="button">
+            Copy
+          </button>
+          <button id="fill-generated" type="button">Fill on page</button>
+        </div>
+        <p class="muted small">
+          After you submit the form, HVSecrets offers to save the new login.
+        </p>
+      </section>
+
+      <footer class="status-bar">
+        <p id="status" class="status" role="status"></p>
+        <div class="footer-actions">
+          <button id="validate-token" class="link-button" type="button">
+            Check connection
+          </button>
+          <button id="login-oidc" type="button" hidden>OIDC login</button>
+          <button id="login-approle" type="button" hidden>AppRole login</button>
+        </div>
+      </footer>
+    </div>
   </body>
 </html>

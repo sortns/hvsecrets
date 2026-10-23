@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { invalidateCredentialIndex } from "../src/background/credential-index";
 import { handleRuntimeRequest } from "../src/background/handlers";
 import { configStorageKey, secretsStorageKey } from "../src/shared/config";
 import type { ExtensionStorageArea } from "../src/background/storage";
@@ -6,6 +7,7 @@ import type { ExtensionStorageArea } from "../src/background/storage";
 describe("background request handlers", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
+    invalidateCredentialIndex();
   });
 
   it("returns config state with validation errors when token is missing", async () => {
@@ -309,7 +311,221 @@ describe("background request handlers", () => {
       error: "Vault session expired. Please log in again.",
     });
   });
+  it("serves repeated searches from the cached index and reloads on refresh", async () => {
+    const vault = createFakeVault({
+      "https.example.com": {
+        "11111111-1111-1111-1111-111111111111": credentialData(
+          "https://example.com",
+          "alice",
+        ),
+      },
+    });
+    vi.stubGlobal("fetch", vault.fetch);
+    const storage = createConfiguredStorage();
+
+    const first = await handleRuntimeRequest(
+      { type: "credentials.search", query: "" },
+      storage,
+      createTabsApi({}),
+    );
+    const requestsAfterFirst = vault.fetch.mock.calls.length;
+    const second = await handleRuntimeRequest(
+      { type: "credentials.search", query: "alice" },
+      storage,
+      createTabsApi({}),
+    );
+
+    expect(first).toEqual(
+      expect.objectContaining({
+        credentials: [expect.objectContaining({ username: "alice" })],
+      }),
+    );
+    expect(second).toEqual(first);
+    expect(vault.fetch.mock.calls.length).toBe(requestsAfterFirst);
+
+    await handleRuntimeRequest(
+      { type: "credentials.search", query: "", refresh: true },
+      storage,
+      createTabsApi({}),
+    );
+    expect(vault.fetch.mock.calls.length).toBeGreaterThan(requestsAfterFirst);
+  });
+
+  it("deletes a credential and drops it from the cached search index", async () => {
+    const id = "11111111-1111-1111-1111-111111111111";
+    const vault = createFakeVault({
+      "https.example.com": {
+        [id]: credentialData("https://example.com", "alice"),
+      },
+    });
+    vi.stubGlobal("fetch", vault.fetch);
+    const storage = createConfiguredStorage();
+
+    await handleRuntimeRequest(
+      { type: "credentials.search", query: "" },
+      storage,
+      createTabsApi({}),
+    );
+    const deleteResponse = await handleRuntimeRequest(
+      {
+        type: "credentials.delete",
+        origin: "https://example.com",
+        credentialId: id,
+      },
+      storage,
+      createTabsApi({}),
+    );
+    const searchResponse = await handleRuntimeRequest(
+      { type: "credentials.search", query: "" },
+      storage,
+      createTabsApi({}),
+    );
+
+    expect(deleteResponse).toEqual({
+      type: "credentials.deleteResult",
+      ok: true,
+    });
+    expect(vault.fetch).toHaveBeenCalledWith(
+      `http://vault.example/v1/secret/metadata/hvsecrets/credentials/https.example.com/${id}`,
+      expect.objectContaining({ method: "DELETE" }),
+    );
+    expect(searchResponse).toEqual({
+      type: "credentials.searchResult",
+      credentials: [],
+    });
+  });
+
+  it("reports an expired session when listing site credentials gets 403", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn<typeof fetch>().mockResolvedValue(
+        new Response(JSON.stringify({ errors: ["permission denied"] }), {
+          status: 403,
+        }),
+      ),
+    );
+
+    const response = await handleRuntimeRequest(
+      { type: "credentials.listForCurrentTab" },
+      createConfiguredStorage(),
+      createTabsApi({ id: 1, url: "https://example.com/login" }),
+    );
+
+    expect(response).toEqual({
+      type: "credentials.list",
+      origin: "https://example.com",
+      credentials: [],
+      error: "Vault session expired. Please log in again.",
+    });
+  });
+
+  it("sends a generated password to the page and relays the page's answer", async () => {
+    const sendMessage = vi
+      .fn<(tabId: number, message: unknown) => Promise<unknown>>()
+      .mockResolvedValue({ ok: false, error: "No field" });
+
+    const response = await handleRuntimeRequest(
+      { type: "credentials.fillGeneratedPassword", password: "Gen3rated!" },
+      createMemoryStorage(),
+      {
+        query: () =>
+          Promise.resolve([{ id: 7, url: "https://example.com/signup" }]),
+        sendMessage,
+      },
+    );
+
+    expect(sendMessage).toHaveBeenCalledWith(7, {
+      type: "content.fillPassword",
+      password: "Gen3rated!",
+    });
+    expect(response).toEqual({
+      type: "credentials.fillResult",
+      ok: false,
+      error: "No field",
+    });
+  });
 });
+
+function createConfiguredStorage(): ExtensionStorageArea {
+  return createMemoryStorage({
+    [configStorageKey]: {
+      vaultUrl: "http://vault.example",
+      kvMount: "secret",
+      basePath: "hvsecrets",
+      authMode: "token",
+      oidcAuthMount: "oidc",
+      oidcRole: "hvsecrets",
+      approleAuthMount: "approle",
+      approleRoleId: "",
+      vaultNamespace: "",
+    },
+    [secretsStorageKey]: { vaultToken: "token" },
+  });
+}
+
+function credentialData(origin: string, username: string) {
+  return {
+    schema: 1,
+    origin,
+    realm: null,
+    username,
+    password: "secret",
+    url: `${origin}/login`,
+    title: "Example",
+    created_at: "2026-05-26T00:00:00.000Z",
+    updated_at: "2026-05-26T00:00:00.000Z",
+    tags: [],
+    notes: "",
+  };
+}
+
+// Minimal KV v2 server: LIST/GET/DELETE under secret/{metadata,data}/hvsecrets.
+function createFakeVault(
+  tree: Record<string, Record<string, Record<string, unknown>>>,
+) {
+  const prefix = "http://vault.example/v1/secret/";
+  const fetch = vi.fn<typeof globalThis.fetch>((input, init) => {
+    const url = input instanceof Request ? input.url : input.toString();
+    const method = init?.method ?? "GET";
+    const [kind, ...rest] = url.slice(prefix.length).split("/");
+    const segments = rest.slice(2);
+    const notFound = new Response(JSON.stringify({ errors: [] }), {
+      status: 404,
+    });
+
+    if (method === "LIST" && kind === "metadata") {
+      const keys =
+        segments.length === 0
+          ? Object.keys(tree).map((origin) => `${origin}/`)
+          : Object.keys(tree[segments[0]] ?? {});
+
+      return Promise.resolve(
+        keys.length === 0 ? notFound : jsonResponse({ data: { keys } }),
+      );
+    }
+
+    const [origin = "", id = ""] = segments;
+    const records = Object.hasOwn(tree, origin) ? tree[origin] : {};
+
+    if (!Object.hasOwn(records, id)) {
+      return Promise.resolve(notFound);
+    }
+
+    if (method === "DELETE" && kind === "metadata") {
+      Reflect.deleteProperty(records, id);
+      if (Object.keys(records).length === 0) {
+        Reflect.deleteProperty(tree, origin);
+      }
+      return Promise.resolve(new Response(null, { status: 204 }));
+    }
+
+    return Promise.resolve(
+      jsonResponse({ data: { data: records[id], metadata: { version: 1 } } }),
+    );
+  });
+
+  return { fetch };
+}
 
 function createTabsApi(tab: {
   readonly url?: string;

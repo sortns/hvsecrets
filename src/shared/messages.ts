@@ -60,11 +60,24 @@ export type RuntimeRequest =
   | { readonly type: "credentials.dismissPendingForCurrentTab" }
   | { readonly type: "credentials.dismissPendingForSenderOrigin" }
   | { readonly type: "credentials.ignoreSenderOrigin" }
-  | { readonly type: "credentials.search"; readonly query: string }
+  | {
+      readonly type: "credentials.search";
+      readonly query: string;
+      readonly refresh?: boolean;
+    }
   | {
       readonly type: "credentials.reveal";
       readonly origin: string;
       readonly credentialId: string;
+    }
+  | {
+      readonly type: "credentials.delete";
+      readonly origin: string;
+      readonly credentialId: string;
+    }
+  | {
+      readonly type: "credentials.fillGeneratedPassword";
+      readonly password: string;
     };
 
 export type RuntimeResponse =
@@ -135,6 +148,11 @@ export type RuntimeResponse =
       readonly ok: boolean;
       readonly password?: string;
       readonly error?: string;
+    }
+  | {
+      readonly type: "credentials.deleteResult";
+      readonly ok: boolean;
+      readonly error?: string;
     };
 
 export function isRuntimeRequest(value: unknown): value is RuntimeRequest {
@@ -182,8 +200,14 @@ export function isRuntimeRequest(value: unknown): value is RuntimeRequest {
     case "credentials.captureLoginAttempt":
       return isCapturedCredentialInput(value.credential);
     case "credentials.search":
-      return isBoundedString(value.query, maxUsernameLength, false);
+      return (
+        isBoundedString(value.query, maxUsernameLength, false) &&
+        (value.refresh === undefined || typeof value.refresh === "boolean")
+      );
+    case "credentials.fillGeneratedPassword":
+      return isBoundedString(value.password, maxPasswordLength, true);
     case "credentials.reveal":
+    case "credentials.delete":
       return (
         isBoundedString(value.origin, maxUrlLength, true) &&
         isHttpUrl(value.origin) &&
