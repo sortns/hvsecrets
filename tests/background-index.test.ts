@@ -57,8 +57,6 @@ describe("background script entry point", () => {
 
     const response = await messageListeners[0]?.({ type: "config.get" }, {});
 
-    expect(response).toEqual(
-      expect.objectContaining({ type: "config.state" }),
-    );
+    expect(response).toEqual(expect.objectContaining({ type: "config.state" }));
   });
 });

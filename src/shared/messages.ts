@@ -61,6 +61,11 @@ export type RuntimeRequest =
   | { readonly type: "credentials.dismissPendingForSenderOrigin" }
   | { readonly type: "credentials.ignoreSenderOrigin" }
   | {
+      readonly type: "credentials.rememberLoginStep";
+      readonly username: string;
+    }
+  | { readonly type: "credentials.loginStepForSenderOrigin" }
+  | {
       readonly type: "credentials.search";
       readonly query: string;
       readonly refresh?: boolean;
@@ -150,6 +155,10 @@ export type RuntimeResponse =
       readonly error?: string;
     }
   | {
+      readonly type: "credentials.loginStep";
+      readonly username: string | null;
+    }
+  | {
       readonly type: "credentials.deleteResult";
       readonly ok: boolean;
       readonly error?: string;
@@ -175,7 +184,10 @@ export function isRuntimeRequest(value: unknown): value is RuntimeRequest {
     case "auth.loginApprole":
     case "settings.ignoredOrigins.list":
     case "credentials.ignoreSenderOrigin":
+    case "credentials.loginStepForSenderOrigin":
       return true;
+    case "credentials.rememberLoginStep":
+      return isBoundedString(value.username, maxUsernameLength, true);
     case "settings.ignoredOrigins.add":
     case "settings.ignoredOrigins.remove":
       return (

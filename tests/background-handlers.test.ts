@@ -444,6 +444,83 @@ describe("background request handlers", () => {
       error: "No field",
     });
   });
+  it("remembers the username step per tab and clears it once the password is captured", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn<typeof fetch>()
+        .mockResolvedValue(new Response(JSON.stringify({}), { status: 404 })),
+    );
+    const sessionStorage = createMemoryStorage();
+    const sender = { tab: { id: 9, url: "https://accounts.example/signin" } };
+    const otherTab = {
+      tab: { id: 10, url: "https://accounts.example/signin" },
+    };
+
+    await handleRuntimeRequest(
+      {
+        type: "credentials.rememberLoginStep",
+        username: " alice@example.com ",
+      },
+      createConfiguredStorage(),
+      createTabsApi({}),
+      sender,
+      undefined,
+      sessionStorage,
+    );
+
+    await expect(
+      handleRuntimeRequest(
+        { type: "credentials.loginStepForSenderOrigin" },
+        createConfiguredStorage(),
+        createTabsApi({}),
+        sender,
+        undefined,
+        sessionStorage,
+      ),
+    ).resolves.toEqual({
+      type: "credentials.loginStep",
+      username: "alice@example.com",
+    });
+    await expect(
+      handleRuntimeRequest(
+        { type: "credentials.loginStepForSenderOrigin" },
+        createConfiguredStorage(),
+        createTabsApi({}),
+        otherTab,
+        undefined,
+        sessionStorage,
+      ),
+    ).resolves.toEqual({ type: "credentials.loginStep", username: null });
+
+    await handleRuntimeRequest(
+      {
+        type: "credentials.captureLoginAttempt",
+        credential: {
+          url: "https://accounts.example/signin/pwd",
+          title: "Sign in",
+          username: "alice@example.com",
+          password: "hunter2",
+        },
+      },
+      createConfiguredStorage(),
+      createTabsApi({}),
+      sender,
+      undefined,
+      sessionStorage,
+    );
+
+    await expect(
+      handleRuntimeRequest(
+        { type: "credentials.loginStepForSenderOrigin" },
+        createConfiguredStorage(),
+        createTabsApi({}),
+        sender,
+        undefined,
+        sessionStorage,
+      ),
+    ).resolves.toEqual({ type: "credentials.loginStep", username: null });
+  });
 });
 
 function createConfiguredStorage(): ExtensionStorageArea {

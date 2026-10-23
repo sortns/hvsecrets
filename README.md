@@ -12,6 +12,7 @@ Instead, it uses content scripts, a background script, popup/options pages, and 
 - Vault AppRole login using a role ID and secret ID.
 - Exact-origin credential binding.
 - Inline credential suggestions on username/password fields.
+- Multi-step logins (username screen → "Next" → password screen, e.g. Google): suggestions on both screens, the password screen offers only the account chosen on the first one, and the save prompt still knows the username. The username (never the password) is kept in `storage.session` for 10 minutes per tab.
 - Context-menu credential fill.
 - Page-level save/update prompt after login attempts.
 - Duplicate prevention by `origin + username`.

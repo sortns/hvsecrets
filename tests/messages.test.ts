@@ -176,4 +176,21 @@ describe("runtime message validation", () => {
       }),
     ).toBe(false);
   });
+  it("validates multi-step login messages", () => {
+    expect(
+      isRuntimeRequest({
+        type: "credentials.rememberLoginStep",
+        username: "alice@example.com",
+      }),
+    ).toBe(true);
+    expect(
+      isRuntimeRequest({
+        type: "credentials.rememberLoginStep",
+        username: " ",
+      }),
+    ).toBe(false);
+    expect(
+      isRuntimeRequest({ type: "credentials.loginStepForSenderOrigin" }),
+    ).toBe(true);
+  });
 });

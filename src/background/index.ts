@@ -1,5 +1,6 @@
 import { handleRuntimeRequest, type ExtensionOidcTabFlowApi } from "./handlers";
 import { isRuntimeRequest } from "../shared/messages";
+import type { ExtensionStorageArea } from "./storage";
 
 const vaultContextMenuRootId = "hvsecrets-use-saved-password";
 const vaultContextMenuCredentialPrefix = "hvsecrets-fill:";
@@ -15,6 +16,15 @@ const contextMenusApi = (
     readonly contextMenus?: typeof browser.contextMenus;
   }
 ).contextMenus;
+
+// storage.session is in-memory and cleared with the browser session, which
+// is the right home for the remembered username of a multi-step login.
+// Not in the bundled typings yet, so feature-detect it.
+const sessionStorageArea = (
+  browser.storage as unknown as {
+    readonly session?: ExtensionStorageArea;
+  }
+).session;
 
 const oidcTabFlow: ExtensionOidcTabFlowApi = {
   openAuthUrlAndWaitForCallback(authUrl, callbackUrlPrefix) {
@@ -44,6 +54,7 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
     },
     sender,
     oidcTabFlow,
+    sessionStorageArea,
   );
 });
 

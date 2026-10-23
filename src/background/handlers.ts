@@ -7,6 +7,12 @@ import {
   getCredentialIndex,
   invalidateCredentialIndex,
 } from "./credential-index";
+import {
+  clearLoginStep,
+  createMemoryStorageArea,
+  getLoginStepUsername,
+  rememberLoginStep,
+} from "./login-step";
 import { VaultAppRoleClient } from "../vault/approle-client";
 import {
   CredentialRepository,
@@ -51,12 +57,15 @@ export interface ExtensionTab {
   readonly title?: string;
 }
 
+const fallbackSessionStorage = createMemoryStorageArea();
+
 export async function handleRuntimeRequest(
   request: RuntimeRequest,
   storage: ExtensionStorageArea,
   tabs: ExtensionTabsApi,
   sender: ExtensionMessageSender = {},
   oidcTabFlow?: ExtensionOidcTabFlowApi,
+  sessionStorage: ExtensionStorageArea = fallbackSessionStorage,
 ): Promise<RuntimeResponse> {
   switch (request.type) {
     case "config.get":
@@ -105,7 +114,16 @@ export async function handleRuntimeRequest(
         request.credentialId,
       );
     case "credentials.captureLoginAttempt":
-      return captureLoginAttempt(storage, sender, request.credential);
+      return captureLoginAttempt(
+        storage,
+        sender,
+        request.credential,
+        sessionStorage,
+      );
+    case "credentials.rememberLoginStep":
+      return rememberSenderLoginStep(sessionStorage, sender, request.username);
+    case "credentials.loginStepForSenderOrigin":
+      return senderLoginStep(sessionStorage, sender);
     case "credentials.pendingForCurrentTab":
       return pendingCredentialForCurrentTab(storage, tabs);
     case "credentials.pendingForSenderOrigin":
@@ -749,10 +767,44 @@ async function fillCredentialForSenderOrigin(
   }
 }
 
+async function rememberSenderLoginStep(
+  sessionStorage: ExtensionStorageArea,
+  sender: ExtensionMessageSender,
+  username: string,
+): Promise<RuntimeResponse> {
+  const origin = getSenderOrigin(sender);
+  const tabId = sender.tab?.id;
+
+  if (origin === null || tabId === undefined) {
+    return { type: "credentials.loginStep", username: null };
+  }
+
+  await rememberLoginStep(sessionStorage, tabId, origin, username.trim());
+
+  return { type: "credentials.loginStep", username: username.trim() };
+}
+
+async function senderLoginStep(
+  sessionStorage: ExtensionStorageArea,
+  sender: ExtensionMessageSender,
+): Promise<RuntimeResponse> {
+  const origin = getSenderOrigin(sender);
+  const tabId = sender.tab?.id;
+
+  return {
+    type: "credentials.loginStep",
+    username:
+      origin === null || tabId === undefined
+        ? null
+        : await getLoginStepUsername(sessionStorage, tabId, origin),
+  };
+}
+
 async function captureLoginAttempt(
   storage: ExtensionStorageArea,
   sender: ExtensionMessageSender,
   credential: CapturedCredentialInput,
+  sessionStorage: ExtensionStorageArea,
 ): Promise<RuntimeResponse> {
   const origin = getTabOrigin(sender.tab ?? {});
 
@@ -773,6 +825,11 @@ async function captureLoginAttempt(
       ok: false,
       error: "Username and password are required",
     };
+  }
+
+  // The login finished; the remembered first step has served its purpose.
+  if (sender.tab?.id !== undefined) {
+    await clearLoginStep(sessionStorage, sender.tab.id);
   }
 
   if (await isIgnoredOrigin(storage, origin)) {

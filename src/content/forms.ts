@@ -1,10 +1,19 @@
-export interface LoginFormFields {
-  readonly username: HTMLInputElement;
-  readonly password: HTMLInputElement;
-}
+// A login form may show both fields, or (multi-step logins such as Google)
+// only the username on the first screen and only the password on the next.
+export type LoginFields =
+  | {
+      readonly username: HTMLInputElement;
+      readonly password: HTMLInputElement | null;
+    }
+  | {
+      readonly username: HTMLInputElement | null;
+      readonly password: HTMLInputElement;
+    };
 
+// Used next to a password field, where any text input in the same form is
+// very likely the username.
 const usernameSelectors = [
-  "input[autocomplete='username']",
+  "input[autocomplete~='username' i]",
   "input[type='email']",
   "input[name*='user' i]",
   "input[id*='user' i]",
@@ -13,22 +22,63 @@ const usernameSelectors = [
   "input[type='text']",
 ];
 
-export function findLoginFormFields(
+// Without a password field a generic text input could be anything (a site
+// search box), so the username step needs an explicit signal.
+const usernameStepSelectors = [
+  "input[autocomplete~='username' i]",
+  "input[autocomplete~='email' i]",
+  "input[type='email']",
+  "input[name*='user' i]",
+  "input[id*='user' i]",
+  "input[name*='login' i]",
+  "input[id*='login' i]",
+  "input[name*='email' i]",
+  "input[id*='email' i]",
+  "input[name*='identifier' i]",
+  "input[id*='identifier' i]",
+];
+
+const textLikeTypes = new Set(["", "text", "email", "tel"]);
+
+export function findLoginFields(
   root: ParentNode = document,
-): LoginFormFields | null {
+): LoginFields | null {
   const password = findPasswordInput(root);
 
-  if (password === null) {
-    return null;
+  if (password !== null) {
+    return { username: findUsernameInput(root, password), password };
   }
 
-  const username = findUsernameInput(root, password);
+  const username = findUsernameStepInput(root);
 
-  if (username === null) {
-    return null;
+  return username === null ? null : { username, password: null };
+}
+
+// On a password-only step the page often still carries the username: a
+// hidden autocomplete=username field (Google's recommended pattern) or a
+// read-only field showing the chosen account.
+export function findUsernameHint(
+  password: HTMLInputElement,
+  root: ParentNode = document,
+): string | null {
+  const searchRoot = password.form ?? root;
+
+  for (const selector of usernameStepSelectors) {
+    for (const input of searchRoot.querySelectorAll<HTMLInputElement>(
+      selector,
+    )) {
+      if (
+        input !== password &&
+        input.type !== "password" &&
+        !isUsableInput(input) &&
+        input.value.trim().length > 0
+      ) {
+        return input.value.trim();
+      }
+    }
   }
 
-  return { username, password };
+  return null;
 }
 
 // Where a freshly generated password should go. Prefer fields the page
@@ -83,6 +133,22 @@ function findPasswordInput(root: ParentNode): HTMLInputElement | null {
   return passwordInputs.find(isUsableInput) ?? null;
 }
 
+function findUsernameStepInput(root: ParentNode): HTMLInputElement | null {
+  for (const selector of usernameStepSelectors) {
+    for (const input of root.querySelectorAll<HTMLInputElement>(selector)) {
+      if (
+        textLikeTypes.has(input.type) &&
+        input.getAttribute("role") !== "combobox" &&
+        isUsableInput(input)
+      ) {
+        return input;
+      }
+    }
+  }
+
+  return null;
+}
+
 function findUsernameInput(
   root: ParentNode,
   password: HTMLInputElement,
@@ -90,10 +156,18 @@ function findUsernameInput(
   const searchRoot = password.form ?? root;
 
   for (const selector of usernameSelectors) {
-    const input = searchRoot.querySelector<HTMLInputElement>(selector);
-
-    if (input !== null && input !== password && isUsableInput(input)) {
-      return input;
+    for (const input of searchRoot.querySelectorAll<HTMLInputElement>(
+      selector,
+    )) {
+      // name*='user' also matches "remember_user" checkboxes and hidden
+      // inputs; only a visible text-like field can be the username.
+      if (
+        input !== password &&
+        textLikeTypes.has(input.type) &&
+        isUsableInput(input)
+      ) {
+        return input;
+      }
     }
   }
 

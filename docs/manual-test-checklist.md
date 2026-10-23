@@ -24,6 +24,14 @@ Use this checklist before sharing a local build.
 - Clicking a suggestion fills username and password.
 - Context menu shows saved users for the current origin and fills the selected credential.
 
+## Multi-Step Login (0.0.4)
+
+- On a username-only screen (e.g. accounts.google.com) focusing the email field shows saved logins; picking one fills only the username.
+- A site search box on the same page does not show the suggestion menu.
+- After "Next", focusing the password field shows only the account chosen/typed on the first screen; picking it fills the password.
+- Typing the username by hand and pressing Enter / "Next" gives the same result on the password screen.
+- Submitting the password screen captures the login with the first screen's username (save prompt appears on the next visit if the site redirects away immediately).
+
 ## Credential Save And Update
 
 - Submitting a new login shows the page-level save prompt.

@@ -51,7 +51,9 @@ export class VaultAppRoleClient {
     const token = response.auth?.client_token;
 
     if (token === undefined || token.length === 0) {
-      throw new Error("Vault AppRole login response did not include client token");
+      throw new Error(
+        "Vault AppRole login response did not include client token",
+      );
     }
 
     return {

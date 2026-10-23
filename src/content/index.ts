@@ -1,4 +1,9 @@
-import { findLoginFormFields, findNewPasswordInputs } from "./forms";
+import {
+  findLoginFields,
+  findNewPasswordInputs,
+  findUsernameHint,
+  type LoginFields,
+} from "./forms";
 import type { RuntimeRequest, RuntimeResponse } from "../shared/messages";
 import type { CredentialSummary } from "../vault/credential-repository";
 import type { PendingCredential } from "../shared/pending-credential";
@@ -79,17 +84,20 @@ function attachFormListeners(): void {
     "keydown",
     (event) => {
       if (
-        event.target instanceof HTMLInputElement &&
-        isPasswordField(event.target)
+        !(event.target instanceof HTMLInputElement) ||
+        !isLoginField(event.target)
       ) {
-        if (event.key === "Escape") {
-          hideCredentialMenu();
-          return;
-        }
+        return;
+      }
 
-        if (event.key === "Enter") {
-          void captureSubmittedCredential(document);
-        }
+      if (event.key === "Escape") {
+        hideCredentialMenu();
+        return;
+      }
+
+      // Enter on a username-only step is how most "Next" screens advance.
+      if (event.key === "Enter") {
+        void captureSubmittedCredential(document);
       }
     },
     true,
@@ -107,11 +115,13 @@ function attachFormListeners(): void {
   });
 }
 
+// Fills whatever the current step shows: both fields, only the username
+// (first step of a multi-step login) or only the password (second step).
 function fillCredential(credential: FillCredentialMessage["credential"]): {
   ok: boolean;
   error?: string;
 } {
-  const fields = findLoginFormFields();
+  const fields = findLoginFields();
 
   if (fields === null) {
     return {
@@ -120,8 +130,16 @@ function fillCredential(credential: FillCredentialMessage["credential"]): {
     };
   }
 
-  setInputValue(fields.username, credential.username);
-  setInputValue(fields.password, credential.password);
+  if (fields.username !== null) {
+    setInputValue(fields.username, credential.username);
+  }
+
+  if (fields.password !== null) {
+    setInputValue(fields.password, credential.password);
+  } else if (credential.username.length > 0) {
+    void rememberLoginStep(credential.username);
+  }
+
   hideCredentialMenu();
 
   return { ok: true };
@@ -152,7 +170,7 @@ function fillGeneratedPassword(password: string): {
 async function maybeShowCredentialMenu(
   target: HTMLInputElement,
 ): Promise<void> {
-  const fields = findLoginFormFields();
+  const fields = findLoginFields();
 
   if (
     fields === null ||
@@ -176,12 +194,72 @@ async function maybeShowCredentialMenu(
     return;
   }
 
-  showCredentialMenu(target, response.credentials);
+  showCredentialMenu(
+    target,
+    await credentialsForStep(fields, response.credentials),
+    fields,
+  );
+}
+
+// On a password-only step, offer the account chosen on the previous step
+// so one click can't put another account's password into the form. Fall
+// back to the full list when the username is unknown or not saved.
+async function credentialsForStep(
+  fields: LoginFields,
+  credentials: readonly CredentialSummary[],
+): Promise<readonly CredentialSummary[]> {
+  if (fields.username !== null || fields.password === null) {
+    return credentials;
+  }
+
+  const username = await knownUsernameForPasswordStep(fields.password);
+
+  if (username === null) {
+    return credentials;
+  }
+
+  const matching = credentials.filter((credential) =>
+    sameUsername(credential.username, username),
+  );
+
+  return matching.length > 0 ? matching : credentials;
+}
+
+async function knownUsernameForPasswordStep(
+  password: HTMLInputElement,
+): Promise<string | null> {
+  const hint = findUsernameHint(password);
+
+  if (hint !== null) {
+    return hint;
+  }
+
+  const response = await sendRuntimeRequest({
+    type: "credentials.loginStepForSenderOrigin",
+  });
+
+  return response.type === "credentials.loginStep" ? response.username : null;
+}
+
+function sameUsername(saved: string, entered: string): boolean {
+  return saved.trim().toLowerCase() === entered.trim().toLowerCase();
+}
+
+async function rememberLoginStep(username: string): Promise<void> {
+  try {
+    await sendRuntimeRequest({
+      type: "credentials.rememberLoginStep",
+      username,
+    });
+  } catch {
+    // Best effort: without it the password step just shows every login.
+  }
 }
 
 function showCredentialMenu(
   anchor: HTMLInputElement,
   credentials: readonly CredentialSummary[],
+  fields: LoginFields,
 ): void {
   hideCredentialMenu();
 
@@ -192,7 +270,8 @@ function showCredentialMenu(
   for (const credential of credentials) {
     const button = document.createElement("button");
     button.type = "button";
-    button.textContent = credential.username;
+    button.textContent =
+      credential.username.length === 0 ? "No username" : credential.username;
     button.addEventListener("mousedown", (event) => {
       event.preventDefault();
     });
@@ -205,9 +284,9 @@ function showCredentialMenu(
   document.documentElement.append(menu);
   positionMenu(anchor, menu);
   menuElement = menu;
-  const fields = findLoginFormFields();
-  menuAnchorInputs =
-    fields === null ? [anchor] : [fields.username, fields.password];
+  menuAnchorInputs = [fields.username, fields.password].filter(
+    (input): input is HTMLInputElement => input !== null,
+  );
 }
 
 async function fillCredentialFromVault(credentialId: string): Promise<void> {
@@ -224,13 +303,13 @@ function hideCredentialMenu(): void {
   menuAnchorInputs = [];
 }
 
-function suppressNativeAutocomplete(fields: {
-  readonly username: HTMLInputElement;
-  readonly password: HTMLInputElement;
-}): void {
-  fields.username.autocomplete = "off";
-  fields.password.autocomplete = "off";
-  fields.password.form?.setAttribute("autocomplete", "off");
+function suppressNativeAutocomplete(fields: LoginFields): void {
+  for (const input of [fields.username, fields.password]) {
+    if (input !== null) {
+      input.autocomplete = "off";
+      input.form?.setAttribute("autocomplete", "off");
+    }
+  }
 }
 
 function isMenuAnchorTarget(target: Node): boolean {
@@ -239,6 +318,18 @@ function isMenuAnchorTarget(target: Node): boolean {
 
 function isPasswordField(input: HTMLInputElement): boolean {
   return input.type === "password";
+}
+
+function isLoginField(input: HTMLInputElement): boolean {
+  if (isPasswordField(input)) {
+    return true;
+  }
+
+  const fields = findLoginFields();
+
+  return (
+    fields !== null && fields.password === null && fields.username === input
+  );
 }
 
 function isLoginActionTarget(target: EventTarget | null): boolean {
@@ -261,7 +352,12 @@ function isLoginActionTarget(target: EventTarget | null): boolean {
     primaryLabel.trim().length === 0 ? fallbackLabel : primaryLabel
   ).trim();
 
-  return /^(log ?in|sign ?in|войти|вход)$/i.test(label);
+  // "Next"/"Continue" advance multi-step logins (and on Google also submit
+  // the password step); on other pages they are harmless because nothing
+  // is captured unless a login field holds a value.
+  return /^(log ?in|sign ?in|войти|вход|next|continue|далее|дальше|продолжить)$/i.test(
+    label,
+  );
 }
 
 function positionMenu(anchor: HTMLElement, menu: HTMLElement): void {
@@ -306,13 +402,34 @@ function clamp(value: number, min: number, max: number): number {
 }
 
 async function captureSubmittedCredential(root: ParentNode): Promise<void> {
-  const fields = findLoginFormFields(root);
+  const fields = findLoginFields(root);
 
-  if (
-    fields === null ||
-    fields.username.value.trim().length === 0 ||
-    fields.password.value.length === 0
-  ) {
+  if (fields === null) {
+    return;
+  }
+
+  if (fields.password === null) {
+    // First step of a multi-step login: keep the username for the next one.
+    const username = fields.username?.value.trim() ?? "";
+
+    if (username.length > 0) {
+      await rememberLoginStep(username);
+    }
+
+    return;
+  }
+
+  if (fields.password.value.length === 0) {
+    return;
+  }
+
+  const visibleUsername = fields.username?.value.trim() ?? "";
+  const username =
+    visibleUsername.length > 0
+      ? visibleUsername
+      : await knownUsernameForPasswordStep(fields.password);
+
+  if (username === null || username.length === 0) {
     return;
   }
 
@@ -321,7 +438,7 @@ async function captureSubmittedCredential(root: ParentNode): Promise<void> {
     credential: {
       url: window.location.href,
       title: document.title,
-      username: fields.username.value.trim(),
+      username,
       password: fields.password.value,
     },
   });

@@ -35,6 +35,11 @@
 - 401/403 from Vault is surfaced as an expired session instead of an empty credential list.
 - Generated passwords use `crypto.getRandomValues` with rejection sampling and a Fisher-Yates shuffle; generator options (not passwords) are stored in extension local storage.
 
+## Multi-Step Logins
+
+- The username typed or picked on a username-only screen is stored in `browser.storage.session` (in-memory, cleared with the browser session) keyed by tab, bound to the exact origin, expiring after 10 minutes and cleared once the password is captured. Passwords are never stored there.
+- On the password screen only credentials whose username matches that value (or a hidden/read-only username field on the page) are offered, so one click cannot fill another account's password.
+
 ## Known Development Tradeoffs
 
 - `browser.storage.local` is not an OS-backed secret store. A native helper or OS keychain integration is still recommended before wider release.
